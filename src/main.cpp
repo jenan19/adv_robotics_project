@@ -6,7 +6,7 @@ int main() {
 
     std::cout << "henlo u stinky\n";
 
-    cv::Mat img = cv::imread("data/DinoSR/dinoSR0001.png");
+    cv::Mat img = cv::imread("../data/DinoSR/dinoSR0001.png");
 
     cv::imshow("dino UwU", img);
     cv::waitKey(0);
