@@ -13,6 +13,15 @@ void loadImages(std::string *path, std::string *seriesName,std::vector<cv::Mat> 
     
 }
 
+void writeImages(std::vector<cv::Mat> *images,std::string *path, std::string *seriesName)
+{
+    for (int i = 0; i < images->size(); i++)
+    {
+        // pushback images
+        cv::imwrite(*path + *seriesName + std::to_string(i + 1) + ".png", images->at(i));
+    }
+}
+
 
 
 void applyMorphology(std::vector<cv::Mat> *images, cv::Size maskSize_open,  cv::Size maskSize_close)
@@ -102,6 +111,7 @@ int main() {
 
     std::string path = "../data/DinoSR/";
     std::string series = "dinoSR";
+    std::string output = "bin_images";
     int numberOfimages = 16;
 
 
@@ -124,6 +134,9 @@ int main() {
     //showImages(&images);
 
     //cv::imshow("dino UwU", img);
+
+    writeImages(&images, &path, &output);
+
     cv::waitKey(0);
 
     return 1;
