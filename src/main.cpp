@@ -35,7 +35,7 @@ void removeBackground(std::vector<cv::Mat> *images, double threshold, double max
 {
     for (int i = 0; i < images->size(); i++)
     {
-        cv::threshold(images->at(i),images->at(i), threshold, maxval, cv::THRESH_TOZERO);
+        cv::inRange(images->at(i),cv::Scalar(threshold, threshold, threshold), cv::Scalar(maxval, maxval, maxval),images->at(i));
     }
     
 
@@ -73,10 +73,10 @@ void findContours(std::vector<cv::Mat> *images, std::vector<cv::Mat> *contours, 
 }
 
 
-void signedDistanceField(std::vector<cv::Mat> *contours)
+void makeBinary(std::vector<cv::Mat> *images)
 {
 
-    
+
 }
 
 
@@ -111,15 +111,15 @@ int main() {
 
 
 
-    removeBackground(&images,25, 200);
+    removeBackground(&images,30, 256);
     
     //showImages(&images);
 
-    applyMorphology(&images, cv::Size (7,7), cv::Size (5,5));
+    applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
 
-    //showImages(&images);
+    showImages(&images);
 
-    findContours(&images, &contours, 10);
+    //findContours(&images, &contours, 10);
     
     //showImages(&images);
 
