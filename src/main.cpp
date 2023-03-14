@@ -127,7 +127,7 @@ int main() {
 
     applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
 
-    showImages(&images);
+    //showImages(&images);
 
     //findContours(&images, &contours, 10);
     
@@ -137,7 +137,7 @@ int main() {
 
     writeImages(&images, &path, &output);
 
-    cv::waitKey(0);
+    //cv::waitKey(1);
 
     return 1;
 }
