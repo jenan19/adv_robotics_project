@@ -1,3 +1,0 @@
-/home/tk/GitHub/SDU/adv_robotics_project/build/CMakeFiles/edit_cache.dir
-/home/tk/GitHub/SDU/adv_robotics_project/build/CMakeFiles/rebuild_cache.dir
-/home/tk/GitHub/SDU/adv_robotics_project/build/CMakeFiles/visualHull.dir
