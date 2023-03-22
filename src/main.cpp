@@ -154,7 +154,41 @@ void get_pmatrix(std::vector<std::vector<std::string>> parameters, std::vector<c
     }
 }
 
-void init_voxels(std::vector<double> xlim,std::vector<double> ylim, std::vector<double> zlim, std::vector<double> voxel_size)
+
+
+template<typename T>
+std::vector<double> linspace(T start_in, T end_in, int num_in)
+{
+
+  std::vector<double> linspaced;
+
+  double start = static_cast<double>(start_in);
+  double end = static_cast<double>(end_in);
+  double num = static_cast<double>(num_in);
+
+  if (num == 0) { return linspaced; }
+  if (num == 1) 
+    {
+      linspaced.push_back(start);
+      return linspaced;
+    }
+
+  double delta = (end - start) / (num - 1);
+
+  for(int i=0; i < num-1; ++i)
+    {
+      linspaced.push_back(start + delta * i);
+    }
+  linspaced.push_back(end); // I want to ensure that start and end
+                            // are exactly the same as the input
+  return linspaced;
+}
+
+cv::Mat v(1,3, cv::DataType<double>::type) voxels_number()
+
+
+
+std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vector<double> ylim, std::vector<double> zlim, std::vector<double> voxel_size)
 {
     cv::Mat v(1,3, cv::DataType<double>::type);
     v.at<double>(0) = std::abs(xlim[1]-xlim[0])/voxel_size[0];
@@ -170,7 +204,70 @@ void init_voxels(std::vector<double> xlim,std::vector<double> ylim, std::vector<
     cv::Mat voxels(total_number, 4, cv::DataType<double>::type); 
 
 
+    //get voxel bounds
+    double startx  = xlim[0];
+    double endx    = xlim[1];
+    double starty  = ylim[0];
+    double endy    = ylim[1];
+    double startz  = zlim[0];
+    double endz    = zlim[1];
+
+
+
+    //Deterimne direction of steps
+
+    double x_step, y_step, z_step;
+
+    if (endx > startx)
+        x_step = voxel_size[0];
+    else
+        x_step = -voxel_size[0];
+
+    if (endx > startx)
+        y_step = voxel_size[1];
+    else
+        y_step = -voxel_size[1];
+
+       if (endx > startx)
+        z_step = voxel_size[2];
+    else
+        z_step = -voxel_size[2];
+
+
+    // make linspaces in X, Y, Z (devide range of axis in actual number of voxel steps)
+    std::vector<double, std::allocator<double>> lin_x = linspace(startx, endx, v_act.at<int>(0));
+    std::vector<double, std::allocator<double>> lin_y = linspace(starty, endy, v_act.at<int>(1));
+    std::vector<double, std::allocator<double>> lin_z = linspace(startz, endz, v_act.at<int>(2));
+
+
+    std::vector<std::array<double, 4>> voxel;
+
+
+    for(int i = 0; i < v_act.at<int>(2); i++)
+    {
+        for (int j = 0; j < v_act.at<int>(1); j++)
+        {
+            for (int l = 0; l < v_act.at<int>(0); l++)
+            {
+                //std::cout <<  lin_x[l] << " " << lin_y[j] << " " << lin_z[i] << std::endl;
+                voxel.push_back({lin_x[l],lin_y[j], lin_z[i], 1});
+            }
+            
+        }
+
+    }
+
+    return voxel;
 }
+
+
+std::vector< std::vector <s td::vector < double, std::allocator<double> > > voxelListTo3D(std::vector<double> voxel_size, 
+std::vector<std::array<double, 4>> voxelList)
+{
+
+
+}
+
 
 
 int main() {
@@ -191,7 +288,7 @@ int main() {
 
     read_parameters(path + "dinoSR_par.txt", parameters);
     get_pmatrix(parameters, projections); 
-    init_voxels({0.0,1.0},{0.0,1.0},{0.0,1.0}, {20,20,20});
+    init_voxels({0.0,1.0},{0.0,1.0},{0.0,1.0}, {0.1,0.1,0.1});
 
     loadImages(&path, &series, &images, numberOfimages);
 
