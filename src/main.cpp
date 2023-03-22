@@ -184,16 +184,20 @@ std::vector<double> linspace(T start_in, T end_in, int num_in)
   return linspaced;
 }
 
-cv::Mat v(1,3, cv::DataType<double>::type) voxels_number()
-
-
-
-std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vector<double> ylim, std::vector<double> zlim, std::vector<double> voxel_size)
+cv::Mat voxels_number(std::vector<double> xlim, std::vector<double> ylim, std::vector<double> zlim, std::vector<double> voxel_size)
 {
     cv::Mat v(1,3, cv::DataType<double>::type);
     v.at<double>(0) = std::abs(xlim[1]-xlim[0])/voxel_size[0];
     v.at<double>(1) = std::abs(ylim[1]-ylim[0])/voxel_size[1];
     v.at<double>(2) = std::abs(zlim[1]-zlim[0])/voxel_size[2];
+    return v;
+}
+
+
+
+std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vector<double> ylim, std::vector<double> zlim, std::vector<double> voxel_size)
+{
+    cv::Mat v(1,3, cv::DataType<double>::type) = voxels_number(xlim, ylim, zlim, voxel_size);
 
     cv::Mat v_act(1,3, cv::DataType<int>::type);
     v_act.at<int>(0) = (int)v.at<double>(0)+1;
