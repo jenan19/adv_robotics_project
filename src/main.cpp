@@ -195,9 +195,10 @@ cv::Mat voxels_number(std::vector<double> xlim, std::vector<double> ylim, std::v
 
 
 
+
 std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vector<double> ylim, std::vector<double> zlim, std::vector<double> voxel_size)
 {
-    cv::Mat v(1,3, cv::DataType<double>::type) = voxels_number(xlim, ylim, zlim, voxel_size);
+    cv::Mat v = voxels_number(xlim, ylim, zlim, voxel_size);
 
     cv::Mat v_act(1,3, cv::DataType<int>::type);
     v_act.at<int>(0) = (int)v.at<double>(0)+1;
@@ -265,11 +266,112 @@ std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vec
 }
 
 
-std::vector< std::vector <s td::vector < double, std::allocator<double> > > voxelListTo3D(std::vector<double> voxel_size, 
-std::vector<std::array<double, 4>> voxelList)
+
+std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<double, 4>> &voxels, 
+                                                        std::vector<std::vector<std::string>> &parameters,
+                                                        std::vector<cv::Mat> *images)
+
 {
 
+    cv::Mat object_points_3D( 4, voxels.size(), cv::DataType<double>::type);
+    
 
+
+
+    for (int i = 0; i < voxels.size(); i++)
+    {
+
+        for (int j = 0; j < 4; j++)
+        {
+            object_points_3D.at<double>(j, i) = voxels[i][j];
+        }
+
+
+        voxels[i][3] = 0;
+    }
+
+
+    //CAMERA PARAMETERS
+    std::vector< cv::Mat> projection;
+        
+    get_pmatrix(parameters, projection);
+
+    for (int i = 0; i < projection.size(); i++)
+    {
+
+        
+       
+        
+        //PROJECTION TO THE IMAGE PLANE
+        cv::Mat points2Dint = projection[i] * object_points_3D;
+
+        //std::cout << points2Dint.rows << "  " << points2Dint.cols << '\n';
+       
+        
+        int img_lim_x = images->at(i).cols;
+        int img_lim_y = images->at(i).rows;
+
+
+        for (int l = 0; l < points2Dint.cols; l++)
+        {
+
+            int x = (int)(points2Dint.at<double>(0, l) / points2Dint.at<double>(l, 2));
+            int y = (int)(points2Dint.at<double>(1, l) / points2Dint.at<double>(l, 2));
+
+            points2Dint.at<double>(0, l) = (x >= 0 && x <= img_lim_x) ? (double)x : 0.0d;
+            points2Dint.at<double>(1, l) = (y >= 0 && y <= img_lim_y) ? (double)y : 0.0d;
+            points2Dint.at<double>(2, l) = 1.0d;
+
+            //// TO DO
+
+
+            // accumalate the value of each voxel in each image
+
+
+        
+        }
+
+
+            
+            // (val >= 0) ? val : 0;
+       
+        
+        
+        /*
+      
+        ind1 = np.where(points2D[1, :] >= img_size[0]) # check for out-of-bounds (width) coordinate
+        points2D[:, ind1] = 0
+        ind1 = np.where(points2D[0, :] >= img_size[1]) # check for out-of-bounds (height) coordinate
+        points2D[:, ind1] = 0
+
+        # ACCUMULATE THE VALUE OF EACH VOXEL IN THE CURRENT IMAGE
+        voxels[:, 3] += silhouettes[:, :, i].T[points2D.T[:, 0], points2D.T[:, 1]]
+
+        proj.append(points2D)*/
+    }
+
+        
+
+    return voxels;
+}
+
+
+
+
+
+std::vector< std::vector <std::vector < double, std::allocator<double> > > > voxelListTo3D(std::vector<double> voxel_size, std::vector<std::array<double, 4>> voxelList)
+{
+    std::vector< std::vector <std::vector < double, std::allocator<double> > > > voxel3D;
+    std::vector<double> xlim = {voxelList[0][0], voxelList[-1][0]};
+    std::vector<double> ylim = {voxelList[0][1], voxelList[-1][1]};
+    std::vector<double> zlim = {voxelList[0][2], voxelList[-1][2]};
+    cv::Mat v = voxels_number(xlim, ylim, zlim, voxel_size);
+
+
+
+
+
+    return voxel3D;
 }
 
 
@@ -292,9 +394,11 @@ int main() {
 
     read_parameters(path + "dinoSR_par.txt", parameters);
     get_pmatrix(parameters, projections); 
-    init_voxels({0.0,1.0},{0.0,1.0},{0.0,1.0}, {0.1,0.1,0.1});
+    std::vector<std::array<double, 4>>  voxels = init_voxels({0.0,1.0},{0.0,1.0},{0.0,1.0}, {0.1,0.1,0.1});
 
     loadImages(&path, &series, &images, numberOfimages);
+
+    projectImagesOnvoxels(voxels, parameters, &images);
 
     //showImages(&images);
 
