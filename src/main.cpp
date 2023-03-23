@@ -1,6 +1,7 @@
 #include <vector>
 #include <iostream>
 #include <string>
+#include <chrono>
 #include <fstream>
 #include <opencv2/opencv.hpp>
 #include <Eigen/Dense>
@@ -265,6 +266,28 @@ std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vec
     return voxel;
 }
 
+std::string type2str(int type) {
+  std::string r;
+
+  uchar depth = type & CV_MAT_DEPTH_MASK;
+  uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+  switch ( depth ) {
+    case CV_8U:  r = "8U"; break;
+    case CV_8S:  r = "8S"; break;
+    case CV_16U: r = "16U"; break;
+    case CV_16S: r = "16S"; break;
+    case CV_32S: r = "32S"; break;
+    case CV_32F: r = "32F"; break;
+    case CV_64F: r = "64F"; break;
+    default:     r = "User"; break;
+  }
+
+  r += "C";
+  r += (chans+'0');
+
+  return r;
+}
 
 
 std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<double, 4>> &voxels, 
@@ -272,6 +295,7 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
                                                         std::vector<cv::Mat> *images)
 
 {
+
 
     cv::Mat object_points_3D( 4, voxels.size(), cv::DataType<double>::type);
     
@@ -300,54 +324,50 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
     {
 
         
-       
-        
+        //cv::imshow("cur im", images->at(i));
+        //cv::waitKey(0);
+        //std::string ty =  type2str( images->at(i).type() );
+        //printf("Matrix: %s %dx%d \n", ty.c_str(), images->at(i).cols, images->at(i).rows );
         //PROJECTION TO THE IMAGE PLANE
         cv::Mat points2Dint = projection[i] * object_points_3D;
 
-        //std::cout << points2Dint.rows << "  " << points2Dint.cols << '\n';
+        //std::cout << points2Dint.rows << "  " << points2Dint.cols  <<'\n';
        
         
         int img_lim_x = images->at(i).cols;
         int img_lim_y = images->at(i).rows;
 
-
+ 
         for (int l = 0; l < points2Dint.cols; l++)
         {
 
-            int x = (int)(points2Dint.at<double>(0, l) / points2Dint.at<double>(l, 2));
-            int y = (int)(points2Dint.at<double>(1, l) / points2Dint.at<double>(l, 2));
+            int x = (int)(points2Dint.at<double>(0, l) / points2Dint.at<double>(2, l));
+            int y = (int)(points2Dint.at<double>(1, l) / points2Dint.at<double>(2, l));
 
-            points2Dint.at<double>(0, l) = (x >= 0 && x <= img_lim_x) ? (double)x : 0.0d;
-            points2Dint.at<double>(1, l) = (y >= 0 && y <= img_lim_y) ? (double)y : 0.0d;
-            points2Dint.at<double>(2, l) = 1.0d;
-
-            //// TO DO
-
-
-            // accumalate the value of each voxel in each image
-
-
-        
+            //if the point is out of bounds replace value with 0
+            x = (x >= 0 && x <= img_lim_x) ? x : 0.0d;
+            y = (y >= 0 && y <= img_lim_y) ? y : 0.0d;
+            
+            // for all non zero cords accumulate the value of the silhouette in the voxel score
+            if (x && y)
+            {                
+                voxels[l][3] += 1;
+            }            
+                    
         }
 
-
-            
-            // (val >= 0) ? val : 0;
-       
-        
-        
         /*
-      
-        ind1 = np.where(points2D[1, :] >= img_size[0]) # check for out-of-bounds (width) coordinate
-        points2D[:, ind1] = 0
-        ind1 = np.where(points2D[0, :] >= img_size[1]) # check for out-of-bounds (height) coordinate
-        points2D[:, ind1] = 0
-
-        # ACCUMULATE THE VALUE OF EACH VOXEL IN THE CURRENT IMAGE
-        voxels[:, 3] += silhouettes[:, :, i].T[points2D.T[:, 0], points2D.T[:, 1]]
-
-        proj.append(points2D)*/
+        std::cout << "img: " << i << " val: "<< img_val << '\n';
+        for (int voxel_idx = 0; voxel_idx < voxels.size(); voxel_idx++)
+        {
+            
+            
+            if (img_val > 0)
+            {
+                
+                voxels[voxel_idx][3] += img_val;
+            }
+        }*/
     }
 
         
@@ -366,9 +386,6 @@ std::vector< std::vector <std::vector < double, std::allocator<double> > > > vox
     std::vector<double> ylim = {voxelList[0][1], voxelList[-1][1]};
     std::vector<double> zlim = {voxelList[0][2], voxelList[-1][2]};
     cv::Mat v = voxels_number(xlim, ylim, zlim, voxel_size);
-
-
-
 
 
     return voxel3D;
@@ -392,13 +409,42 @@ int main() {
     std::vector<cv::Mat> projections;
     std::vector<std::vector<std::string>> parameters;
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     read_parameters(path + "dinoSR_par.txt", parameters);
     get_pmatrix(parameters, projections); 
-    std::vector<std::array<double, 4>>  voxels = init_voxels({0.0,1.0},{0.0,1.0},{0.0,1.0}, {0.1,0.1,0.1});
-
+    
     loadImages(&path, &series, &images, numberOfimages);
 
-    projectImagesOnvoxels(voxels, parameters, &images);
+    removeBackground(&images,30, 256);
+
+    applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
+
+    auto img_done_time = std::chrono::high_resolution_clock::now();
+
+    
+    std::vector<std::array<double, 4>>  voxels = init_voxels({-0.07,0.02},{-0.02, 0.07},{-0.07, 0.02}, {0.001, 0.001, 0.001});
+    
+
+    voxels = projectImagesOnvoxels(voxels, parameters, &images);
+
+    auto voxel_done_time = std::chrono::high_resolution_clock::now();
+
+    auto img_duration = std::chrono::duration_cast<std::chrono::microseconds>(img_done_time - start);
+    auto voxel_duration = std::chrono::duration_cast<std::chrono::microseconds>( voxel_done_time - img_done_time );
+
+    std::cout << "Time taken by loading images  : " << img_duration.count() << " microseconds" << std::endl;
+    std::cout << "Time taken by voxel generation: " << voxel_duration.count() << " microseconds" << std::endl;
+    /*
+    for (auto voxel : voxels)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            std::cout << voxel[i] << " ";
+        }
+        std::cout<< '\n';
+    }
+    */
 
     //showImages(&images);
 
