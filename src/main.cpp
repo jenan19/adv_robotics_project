@@ -356,18 +356,6 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
                     
         }
 
-        /*
-        std::cout << "img: " << i << " val: "<< img_val << '\n';
-        for (int voxel_idx = 0; voxel_idx < voxels.size(); voxel_idx++)
-        {
-            
-            
-            if (img_val > 0)
-            {
-                
-                voxels[voxel_idx][3] += img_val;
-            }
-        }*/
     }
 
         
@@ -377,25 +365,42 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 
 
 
+// std::vector< std::vector <std::vector < double, std::allocator<double> > > > 
 
-
-std::vector< std::vector <std::vector < double, std::allocator<double> > > > voxelListTo3D(std::vector<double> voxel_size, std::vector<std::array<double, 4>> voxelList)
+void voxelListToFile(std::vector<std::array<double, 4>> voxelList)
 {
+    /*
     std::vector< std::vector <std::vector < double, std::allocator<double> > > > voxel3D;
     std::vector<double> xlim = {voxelList[0][0], voxelList[-1][0]};
     std::vector<double> ylim = {voxelList[0][1], voxelList[-1][1]};
     std::vector<double> zlim = {voxelList[0][2], voxelList[-1][2]};
     cv::Mat v = voxels_number(xlim, ylim, zlim, voxel_size);
 
+    for (int l = 0; l < voxelList.size(); l++)
+    {
+        
+        
+    }
+        */
+    
+    std::ofstream voxelFile;
+    voxelFile.open("voxelFile.csv");
+    voxelFile << "x,y,z,score\n";
+    for (unsigned i = 0; i < voxelList.size(); i++)
+    {
+       
+        voxelFile << voxelList[i][0] << ',';
+        voxelFile << voxelList[i][1] << ',';
+        voxelFile << voxelList[i][2] << ',';
+        voxelFile << voxelList[i][3] << '\n';
+    }
 
-    return voxel3D;
 }
 
 
 
-int main() {
-
-    std::cout << "henlo u stinky\n";
+int main() 
+{
 
     std::vector<cv::Mat> images;
 
@@ -435,6 +440,10 @@ int main() {
 
     std::cout << "Time taken by loading images  : " << img_duration.count() << " microseconds" << std::endl;
     std::cout << "Time taken by voxel generation: " << voxel_duration.count() << " microseconds" << std::endl;
+    
+    voxelListToFile(voxels);
+
+    
     /*
     for (auto voxel : voxels)
     {
