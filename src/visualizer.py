@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from numpy import genfromtxt
 import mcubes
 
-voxel3D = genfromtxt('data/voxelFile.csv', delimiter=',')
+voxel3D = genfromtxt('build/voxelFile.csv', delimiter=',')
 
 
 
@@ -20,10 +20,10 @@ points_x = np.unique(np.array(voxel3D[1:, 0]))
 points_y = np.unique(np.array(voxel3D[1:, 1]))
 points_z = np.unique(np.array(voxel3D[1:, 2]))
 
+#print('points_x: ',points_x)
+voxel3D_score = np.zeros((points_x.shape[0], points_y.shape[0], points_z.shape[0]))
 
-voxel3D_score = np.zeros((points_x.shape[0], points_y.shape[0] - 1, points_z.shape[0] - 1))
-
-data_idx = 0
+data_idx = 1
 for x in range(voxel3D_score.shape[0]):
     for y in range(voxel3D_score.shape[1]):
         for z in range(voxel3D_score.shape[2]):

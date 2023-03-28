@@ -150,7 +150,22 @@ void get_pmatrix(std::vector<std::vector<std::string>> parameters, std::vector<c
             t.at<double>(row,0) = std::stod(parameters[i][count]); 
             count++; 
         }
+        
+        //std::cout << "\nR:\n" << R << '\n';
+        //std::cout << "\nt:\n" << t << '\n';
+        //std::cout << "\nK:\n" << K << '\n';
+        //cv::Mat zeroMat = cv::Mat::zeros(3,1, cv::DataType<double>::type);
+        //cv::Mat K_(3,4, cv::DataType<double>::type);
+        //cv::Mat E_(4,4, cv::DataType<double>::type);
+        //cv::hconcat(K,zeroMat, K_);
         cv::hconcat(R,t,E);
+        //std::cout << "\nE:\n" << E << '\n';
+        //zeroMat = cv::Mat::zeros(1,4, cv::DataType<double>::type);
+        //zeroMat.at<double>(0,3) = 1;
+
+        //cv::vconcat(E,zeroMat,E_);
+
+        //std::cout << "\nE_:\n" << E_ << '\n';
         projections.push_back(K*E); 
     }
 }
@@ -213,31 +228,15 @@ std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vec
     //get voxel bounds
     double startx  = xlim[0];
     double endx    = xlim[1];
+    
     double starty  = ylim[0];
     double endy    = ylim[1];
+    
     double startz  = zlim[0];
     double endz    = zlim[1];
 
 
 
-    //Deterimne direction of steps
-
-    double x_step, y_step, z_step;
-
-    if (endx > startx)
-        x_step = voxel_size[0];
-    else
-        x_step = -voxel_size[0];
-
-    if (endx > startx)
-        y_step = voxel_size[1];
-    else
-        y_step = -voxel_size[1];
-
-       if (endx > startx)
-        z_step = voxel_size[2];
-    else
-        z_step = -voxel_size[2];
 
 
     // make linspaces in X, Y, Z (devide range of axis in actual number of voxel steps)
@@ -251,12 +250,12 @@ std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vec
 
     for(int i = 0; i < v_act.at<int>(2); i++)
     {
-        for (int j = 0; j < v_act.at<int>(1); j++)
+        for (int j = 0; j < v_act.at<int>(0); j++)
         {
-            for (int l = 0; l < v_act.at<int>(0); l++)
+            for (int l = 0; l < v_act.at<int>(1); l++)
             {
                 //std::cout <<  lin_x[l] << " " << lin_y[j] << " " << lin_z[i] << std::endl;
-                voxel.push_back({lin_x[l],lin_y[j], lin_z[i], 1});
+                voxel.push_back({lin_x[j],lin_y[l], lin_z[i], 1});
             }
             
         }
@@ -297,7 +296,7 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 {
 
 
-    cv::Mat object_points_3D( 4, voxels.size(), cv::DataType<double>::type);
+    cv::Mat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
     
 
 
@@ -307,23 +306,32 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 
         for (int j = 0; j < 4; j++)
         {
-            object_points_3D.at<double>(j, i) = voxels[i][j];
+            object_points_3D.at<double>(i, j) = voxels[i][j];
         }
 
 
         voxels[i][3] = 0;
     }
 
+    
+    //std::cout << "\nobjects_3d\n" << object_points_3D << '\n';
+
+    object_points_3D = object_points_3D.t();
+    
+
 
     //CAMERA PARAMETERS
     std::vector< cv::Mat> projection;
+    
+
         
     get_pmatrix(parameters, projection);
+   
 
     for (int i = 0; i < projection.size(); i++)
     {
 
-        
+        std::cout << "\nPROJ\n" << projection[i] << '\n';
         //cv::imshow("cur im", images->at(i));
         //cv::waitKey(0);
         //std::string ty =  type2str( images->at(i).type() );
@@ -331,6 +339,7 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
         //PROJECTION TO THE IMAGE PLANE
         cv::Mat points2Dint = projection[i] * object_points_3D;
 
+        //std::cout << "2d points" << points2Dint.t();
         //std::cout << points2Dint.rows << "  " << points2Dint.cols  <<'\n';
        
         
@@ -345,21 +354,28 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
             int y = (int)(points2Dint.at<double>(1, l) / points2Dint.at<double>(2, l));
 
             //if the point is out of bounds replace value with 0
-            x = (x >= 0 && x <= img_lim_x) ? x : 0.0d;
-            y = (y >= 0 && y <= img_lim_y) ? y : 0.0d;
-            
-            // for all non zero cords accumulate the value of the silhouette in the voxel score
-            if (x && y)
+            if (x < 0 || img_lim_x < x) 
+            {
+                x = 0;
+            }
+
+            if (y < 0 || img_lim_y < y) 
+            {
+                y = 0;
+            }
+            //std::cout << (int)images->at(i).at<uchar>(x,y) << '\n';
+            // for all non zero cords check if pixel is true (255) and increment the vote for the given voxel if yes
+            if (x && y && (int)images->at(i).at<uchar>(y,x))
             {                
                 voxels[l][3] += 1;
-            }            
-                    
+            }
+                
         }
 
     }
 
-        
-
+   
+    //std::cout << images->at(0);
     return voxels;
 }
 
@@ -375,7 +391,7 @@ void voxelListToFile(std::vector<std::array<double, 4>> voxelList)
     std::vector<double> ylim = {voxelList[0][1], voxelList[-1][1]};
     std::vector<double> zlim = {voxelList[0][2], voxelList[-1][2]};
     cv::Mat v = voxels_number(xlim, ylim, zlim, voxel_size);
-
+0.07, -0.04
     for (int l = 0; l < voxelList.size(); l++)
     {
         
@@ -427,8 +443,16 @@ int main()
 
     auto img_done_time = std::chrono::high_resolution_clock::now();
 
+
+
+    std::vector<double> voxel_size = {0.001, 0.001, 0.001};
+
+   
+    std::vector<double> xlim = {-0.07, 0.02};
+    std::vector<double> ylim = {-0.02, 0.07};
+    std::vector<double> zlim = {-0.07, 0.02};
     
-    std::vector<std::array<double, 4>>  voxels = init_voxels({-0.07,0.02},{-0.02, 0.07},{-0.07, 0.02}, {0.001, 0.001, 0.001});
+    std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
     
 
     voxels = projectImagesOnvoxels(voxels, parameters, &images);
@@ -452,8 +476,8 @@ int main()
             std::cout << voxel[i] << " ";
         }
         std::cout<< '\n';
-    }
-    */
+    }*/
+    
 
     //showImages(&images);
 
@@ -473,7 +497,7 @@ int main()
 
     //cv::imshow("dino UwU", img);
 
-    //writeImages(&images, &path, &output);
+    writeImages(&images, &path, &output);
 
     //cv::waitKey(1);
 
