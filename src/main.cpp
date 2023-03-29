@@ -1,10 +1,25 @@
+#define CL_HPP_ENABLE_EXCEPTIONS
+#define CL_HPP_TARGET_OPENCL_VERSION 200
+
+
+
+
+
 #include <vector>
 #include <iostream>
 #include <string>
 #include <chrono>
 #include <fstream>
 #include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+//#include <opencv2/core/ocl.hpp>
 #include <Eigen/Dense>
+
+
+
+typedef cv::Point3_<double> Pixel;
+
+
 
 void loadImages(std::string *path, std::string *seriesName,std::vector<cv::Mat> *images, int numberOfImages)
 {
@@ -55,10 +70,12 @@ void findContours(std::vector<cv::Mat> *images, std::vector<cv::Mat> *contours, 
     for (int i = 0; i < images->size(); i++)
     {
         std::vector<std::vector< cv::Point>> current_contour;
-        cv::Mat canny_output;
+        cv::UMat canny_input, canny_output;
         std::vector<cv::Vec4i> hierarchy;
 
-        cv::Canny(images->at(i), canny_output, threshold, threshold*2);
+        images->at(i).copyTo(canny_input);
+
+        cv::Canny(canny_input, canny_output, threshold, threshold*2);
 
 
         cv::findContours(images->at(i), current_contour,  hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
@@ -222,7 +239,7 @@ std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vec
     v_act.at<int>(2) = (int)v.at<double>(2)+1;
     int total_number = v_act.at<int>(0)*v_act.at<int>(1)*v_act.at<int>(2); 
 
-    cv::Mat voxels(total_number, 4, cv::DataType<double>::type); 
+    //cv::Mat voxels(total_number, 4, cv::DataType<double>::type); 
 
 
     //get voxel bounds
@@ -289,6 +306,10 @@ std::string type2str(int type) {
 }
 
 
+
+
+
+
 std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<double, 4>> &voxels, 
                                                         std::vector<std::vector<std::string>> &parameters,
                                                         std::vector<cv::Mat> *images)
@@ -296,11 +317,15 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 {
 
 
-    cv::Mat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
+   
     
 
 
-
+    //std::cout << "Making objects 3d\n";
+    //cv::UMat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
+    //cv::Mat object_points_3D_temp(voxels.size(), 4,cv::DataType<double>::type);
+    
+    cv::Mat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
     for (int i = 0; i < voxels.size(); i++)
     {
 
@@ -312,32 +337,57 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 
         voxels[i][3] = 0;
     }
-
+     //std::cout << "done...\n ";
     
     //std::cout << "\nobjects_3d\n" << object_points_3D << '\n';
+    /*
+    object_points_3D_temp.copyTo(object_points_3D);
+
+    object_points_3D_temp.~Mat();*/
 
     object_points_3D = object_points_3D.t();
     
 
 
     //CAMERA PARAMETERS
-    std::vector< cv::Mat> projection;
+    std::vector<cv::Mat> projection;
     
 
         
     get_pmatrix(parameters, projection);
    
-
+    
+    cv::Mat points2Dint, dummy;
     for (int i = 0; i < projection.size(); i++)
     {
 
-        std::cout << "\nPROJ\n" << projection[i] << '\n';
+        //std::cout << "\nPROJ\n" << projection[i] << '\n';
         //cv::imshow("cur im", images->at(i));
         //cv::waitKey(0);
         //std::string ty =  type2str( images->at(i).type() );
         //printf("Matrix: %s %dx%d \n", ty.c_str(), images->at(i).cols, images->at(i).rows );
+        
+        //std::cout << "copying\n";
+        //cv::UMat current_projection;
+        //projection[i].copyTo(current_projection);
+        
+        //std::cout << "Multiplying\n";
+        /*
+        try {
+            cv:gemm(projection[i], object_points_3D, 1.0, dummy, 0.0, points2Dint);
+        } 
+        catch (cv::Exception& e) {
+            std::cerr << e.what();
+        
+        }*/
+        
         //PROJECTION TO THE IMAGE PLANE
-        cv::Mat points2Dint = projection[i] * object_points_3D;
+        
+        cv::gemm(projection[i], object_points_3D, 1.0, dummy, 0, points2Dint);
+
+        //points2Dint = projection[i] * object_points_3D;
+
+        //std::cout << "Done\n";
 
         //std::cout << "2d points" << points2Dint.t();
         //std::cout << points2Dint.rows << "  " << points2Dint.cols  <<'\n';
@@ -346,13 +396,38 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
         int img_lim_x = images->at(i).cols;
         int img_lim_y = images->at(i).rows;
 
+
+        //The efficient way but goes into seg. fault
+        
+        //points2Dint.getStdAllocator()
+
+        /*
+        points2Dint.forEach<cv::Point3_<double_t>>(
+            [](cv::Point3_<double_t> &point, const int * position){
+            
+            //std::cout << point << '\n';
+            point.x = (int)(point.x / point.z);
+            point.y = (int)(point.y / point.z);
+            point.z = 1;
+            //std::cout << point << '\n';
+            }
+        );*/
+
  
         for (int l = 0; l < points2Dint.cols; l++)
         {
 
-            int x = (int)(points2Dint.at<double>(0, l) / points2Dint.at<double>(2, l));
-            int y = (int)(points2Dint.at<double>(1, l) / points2Dint.at<double>(2, l));
+            
+            int x = points2Dint.at<double>(0, l) / points2Dint.at<double>(2, l);
+            int y = points2Dint.at<double>(1, l) / points2Dint.at<double>(2, l);
+            
+            //for all non zero and in-bounds cords check if pixel is true (255) and increment the vote for the given voxel if yes
+            
+            voxels[l][3] = (x && y && x < img_lim_x && y < img_lim_y && (int)images->at(i).at<uchar>(y,x)) ? voxels[l][3] + 1 : voxels[l][3];
 
+
+            /////// equivalent to but slightly faster than:
+            /*
             //if the point is out of bounds replace value with 0
             if (x < 0 || img_lim_x < x) 
             {
@@ -363,12 +438,11 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
             {
                 y = 0;
             }
-            //std::cout << (int)images->at(i).at<uchar>(x,y) << '\n';
-            // for all non zero cords check if pixel is true (255) and increment the vote for the given voxel if yes
+           
             if (x && y && (int)images->at(i).at<uchar>(y,x))
             {                
                 voxels[l][3] += 1;
-            }
+            }*/
                 
         }
 
@@ -418,6 +492,9 @@ void voxelListToFile(std::vector<std::array<double, 4>> voxelList)
 int main() 
 {
 
+    
+    
+
     std::vector<cv::Mat> images;
 
     std::vector<cv::Mat> contours;
@@ -445,7 +522,7 @@ int main()
 
 
 
-    std::vector<double> voxel_size = {0.001, 0.001, 0.001};
+    std::vector<double> voxel_size = {0.0005, 0.0005, 0.0005};
 
    
     std::vector<double> xlim = {-0.07, 0.02};
@@ -462,8 +539,8 @@ int main()
     auto img_duration = std::chrono::duration_cast<std::chrono::microseconds>(img_done_time - start);
     auto voxel_duration = std::chrono::duration_cast<std::chrono::microseconds>( voxel_done_time - img_done_time );
 
-    std::cout << "Time taken by loading images  : " << img_duration.count() << " microseconds" << std::endl;
-    std::cout << "Time taken by voxel generation: " << voxel_duration.count() << " microseconds" << std::endl;
+    std::cout << "Time taken by loading images  : " << img_duration.count() /1000000.0 << " seconds" << std::endl;
+    std::cout << "Time taken by voxel generation: " << voxel_duration.count() /1000000.0 << " seconds" << std::endl;
     
     voxelListToFile(voxels);
 
