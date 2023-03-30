@@ -272,7 +272,7 @@ std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vec
             for (int l = 0; l < v_act.at<int>(1); l++)
             {
                 //std::cout <<  lin_x[l] << " " << lin_y[j] << " " << lin_z[i] << std::endl;
-                voxel.push_back({lin_x[j],lin_y[l], lin_z[i], 1});
+                voxel.push_back({lin_x[j],lin_y[l], lin_z[i], 0});
             }
             
         }
@@ -335,7 +335,6 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
         
         *it = {voxels[i][0], voxels[i][1], voxels[i][2], 1};
         
-        voxels[i][3] = 0;
     }
      //std::cout << "done...\n ";
     
@@ -398,8 +397,8 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
         //std::cout << points2Dint.rows << "  " << points2Dint.cols  <<'\n';
        
         
-        int img_lim_x = images->at(i).cols;
-        int img_lim_y = images->at(i).rows;
+        int img_lim_x = img->cols;
+        int img_lim_y = img->rows;
 
 
         //The efficient way but goes into seg. fault
