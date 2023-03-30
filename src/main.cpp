@@ -319,7 +319,9 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 
    
     
+    auto start = std::chrono::high_resolution_clock::now();
 
+    
 
     //std::cout << "Making objects 3d\n";
     //cv::UMat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
@@ -329,12 +331,10 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
     for (int i = 0; i < voxels.size(); i++)
     {
 
-        for (int j = 0; j < 4; j++)
-        {
-            object_points_3D.at<double>(i, j) = voxels[i][j];
-        }
-
-
+        cv::Vec4d* it = object_points_3D.ptr<cv::Vec4d>(i);
+        
+        *it = {voxels[i][0], voxels[i][1], voxels[i][2], 1};
+        
         voxels[i][3] = 0;
     }
      //std::cout << "done...\n ";
@@ -345,9 +345,11 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 
     object_points_3D_temp.~Mat();*/
 
+    auto point3Ddone  = std::chrono::high_resolution_clock::now();
+    
     object_points_3D = object_points_3D.t();
     
-
+    auto transposeDone  = std::chrono::high_resolution_clock::now();
 
     //CAMERA PARAMETERS
     std::vector<cv::Mat> projection;
@@ -357,9 +359,12 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
     get_pmatrix(parameters, projection);
    
     
-    cv::Mat points2Dint, dummy;
+    
     for (int i = 0; i < projection.size(); i++)
     {
+        cv::Mat points2Dint, dummy;
+        cv::Mat* img = &images->at(i);
+
 
         //std::cout << "\nPROJ\n" << projection[i] << '\n';
         //cv::imshow("cur im", images->at(i));
@@ -387,7 +392,7 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 
         //points2Dint = projection[i] * object_points_3D;
 
-        //std::cout << "Done\n";
+        //std::cout << "2D points is continous: " << points2Dint.isContinuous() << '\n';
 
         //std::cout << "2d points" << points2Dint.t();
         //std::cout << points2Dint.rows << "  " << points2Dint.cols  <<'\n';
@@ -401,29 +406,21 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
         
         //points2Dint.getStdAllocator()
 
-        /*
-        points2Dint.forEach<cv::Point3_<double_t>>(
-            [](cv::Point3_<double_t> &point, const int * position){
-            
-            //std::cout << point << '\n';
-            point.x = (int)(point.x / point.z);
-            point.y = (int)(point.y / point.z);
-            point.z = 1;
-            //std::cout << point << '\n';
-            }
-        );*/
+        //std::cout << "2D points is continous: " << points2Dint.isContinuous() << '\n';
+     
+        
 
- 
-        for (int l = 0; l < points2Dint.cols; l++)
+        for (int l = 0; l < points2Dint.rows; l++)
         {
-
+            cv::Point3d* it = points2Dint.ptr<cv::Point3d>(l);
             
-            int x = points2Dint.at<double>(0, l) / points2Dint.at<double>(2, l);
-            int y = points2Dint.at<double>(1, l) / points2Dint.at<double>(2, l);
+            //approximate of a/b but faster
+            int x = it->x * (1.0d / it->z);
+            int y = it->y * (1.0d / it->z);
             
             //for all non zero and in-bounds cords check if pixel is true (255) and increment the vote for the given voxel if yes
             
-            voxels[l][3] = (x && y && x < img_lim_x && y < img_lim_y && (int)images->at(i).at<uchar>(y,x)) ? voxels[l][3] + 1 : voxels[l][3];
+            voxels[l][3] = (x && y && x < img_lim_x && y < img_lim_y && (int)img->at<uchar>(y,x)) ? ++voxels[l][3]: voxels[l][3];
 
 
             /////// equivalent to but slightly faster than:
@@ -447,8 +444,13 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
         }
 
     }
-
-   
+    
+    auto point3D_duration = std::chrono::duration_cast<std::chrono::microseconds>( point3Ddone - start );
+    auto transpose_duration = std::chrono::duration_cast<std::chrono::microseconds>( transposeDone - point3Ddone );
+    auto point2D_duration = std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::high_resolution_clock::now() - transposeDone );
+    std::cout << "Time taken making 3d points  : " << point3D_duration.count() /1000000.0d << " seconds" << std::endl;
+    std::cout << "Time taken transposing : " << transpose_duration.count() /1000000.0d << " seconds" << std::endl;
+    std::cout << "Time taken making 2d points : " << point2D_duration.count() /1000000.0d << " seconds" << std::endl;
     //std::cout << images->at(0);
     return voxels;
 }
@@ -522,7 +524,7 @@ int main()
 
 
 
-    std::vector<double> voxel_size = {0.0005, 0.0005, 0.0005};
+    std::vector<double> voxel_size = {0.001, 0.001, 0.001};
 
    
     std::vector<double> xlim = {-0.07, 0.02};
