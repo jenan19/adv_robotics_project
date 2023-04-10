@@ -1,10 +1,6 @@
 #define CL_HPP_ENABLE_EXCEPTIONS
 #define CL_HPP_TARGET_OPENCL_VERSION 200
 
-
-
-
-
 #include <vector>
 #include <iostream>
 #include <string>
@@ -12,12 +8,16 @@
 #include <fstream>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
+
+//#include <open3d/Open3D.h>      //Den her laver noget mærkeligt 
+
+
 //#include <opencv2/core/ocl.hpp>
 #include <Eigen/Dense>
 
 
 
-typedef cv::Point3_<double> Pixel;
+//typedef cv::Point3_<double> Pixel;
 
 
 
@@ -143,6 +143,7 @@ void get_pmatrix(std::vector<std::vector<std::string>> parameters, std::vector<c
     cv::Mat R(3,3, cv::DataType<double>::type);
     cv::Mat t(3,1, cv::DataType<double>::type);
     cv::Mat E(3,4, cv::DataType<double>::type); 
+    
     for(int i = 0; i < parameters.size(); i++)
     { 
         int count = 1;
@@ -168,21 +169,9 @@ void get_pmatrix(std::vector<std::vector<std::string>> parameters, std::vector<c
             count++; 
         }
         
-        //std::cout << "\nR:\n" << R << '\n';
-        //std::cout << "\nt:\n" << t << '\n';
-        //std::cout << "\nK:\n" << K << '\n';
-        //cv::Mat zeroMat = cv::Mat::zeros(3,1, cv::DataType<double>::type);
-        //cv::Mat K_(3,4, cv::DataType<double>::type);
-        //cv::Mat E_(4,4, cv::DataType<double>::type);
-        //cv::hconcat(K,zeroMat, K_);
+
         cv::hconcat(R,t,E);
-        //std::cout << "\nE:\n" << E << '\n';
-        //zeroMat = cv::Mat::zeros(1,4, cv::DataType<double>::type);
-        //zeroMat.at<double>(0,3) = 1;
 
-        //cv::vconcat(E,zeroMat,E_);
-
-        //std::cout << "\nE_:\n" << E_ << '\n';
         projections.push_back(K*E); 
     }
 }
@@ -239,7 +228,7 @@ std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vec
     v_act.at<int>(2) = (int)v.at<double>(2)+1;
     int total_number = v_act.at<int>(0)*v_act.at<int>(1)*v_act.at<int>(2); 
 
-    //cv::Mat voxels(total_number, 4, cv::DataType<double>::type); 
+
 
 
     //get voxel bounds
@@ -271,7 +260,7 @@ std::vector<std::array<double, 4>> init_voxels(std::vector<double> xlim,std::vec
         {
             for (int l = 0; l < v_act.at<int>(1); l++)
             {
-                //std::cout <<  lin_x[l] << " " << lin_y[j] << " " << lin_z[i] << std::endl;
+
                 voxel.push_back({lin_x[j],lin_y[l], lin_z[i], 0});
             }
             
@@ -323,9 +312,6 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 
     
 
-    //std::cout << "Making objects 3d\n";
-    //cv::UMat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
-    //cv::Mat object_points_3D_temp(voxels.size(), 4,cv::DataType<double>::type);
     
     cv::Mat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
     for (int i = 0; i < voxels.size(); i++)
@@ -336,13 +322,7 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
         *it = {voxels[i][0], voxels[i][1], voxels[i][2], 1};
         
     }
-     //std::cout << "done...\n ";
-    
-    //std::cout << "\nobjects_3d\n" << object_points_3D << '\n';
-    /*
-    object_points_3D_temp.copyTo(object_points_3D);
 
-    object_points_3D_temp.~Mat();*/
 
     auto point3Ddone  = std::chrono::high_resolution_clock::now();
     
@@ -356,89 +336,50 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
 
         
     get_pmatrix(parameters, projection);
-   
     
+
     
     for (int i = 0; i < projection.size(); i++)
     {
         cv::Mat points2Dint, dummy;
-        cv::Mat* img = &images->at(i);
+        cv::Mat img = images->at(i).clone();
 
 
-        //std::cout << "\nPROJ\n" << projection[i] << '\n';
-        //cv::imshow("cur im", images->at(i));
-        //cv::waitKey(0);
-        //std::string ty =  type2str( images->at(i).type() );
-        //printf("Matrix: %s %dx%d \n", ty.c_str(), images->at(i).cols, images->at(i).rows );
-        
-        //std::cout << "copying\n";
-        //cv::UMat current_projection;
-        //projection[i].copyTo(current_projection);
-        
-        //std::cout << "Multiplying\n";
-        /*
-        try {
-            cv:gemm(projection[i], object_points_3D, 1.0, dummy, 0.0, points2Dint);
-        } 
-        catch (cv::Exception& e) {
-            std::cerr << e.what();
-        
-        }*/
-        
         //PROJECTION TO THE IMAGE PLANE
-        
+        //points2Dint = projection[i] * object_points_3D;
         cv::gemm(projection[i], object_points_3D, 1.0, dummy, 0, points2Dint);
 
-        //points2Dint = projection[i] * object_points_3D;
 
-        //std::cout << "2D points is continous: " << points2Dint.isContinuous() << '\n';
-
-        //std::cout << "2d points" << points2Dint.t();
-        //std::cout << points2Dint.rows << "  " << points2Dint.cols  <<'\n';
        
         
-        int img_lim_x = img->cols;
-        int img_lim_y = img->rows;
+        int img_lim_x = img.cols;
+        int img_lim_y = img.rows;
+
+        //std::cout << points2Dint.cols << '\n';
+        //std::cout << points2Dint.rows << '\n';
 
 
-        //The efficient way but goes into seg. fault
-        
-        //points2Dint.getStdAllocator()
-
-        //std::cout << "2D points is continous: " << points2Dint.isContinuous() << '\n';
-     
-        
-
-        for (int l = 0; l < points2Dint.rows; l++)
+        for (int l = 0; l < points2Dint.cols ; l++)
         {
-            cv::Point3d* it = points2Dint.ptr<cv::Point3d>(l);
             
+            double* itx = points2Dint.ptr<double>(0);
+
+            double* ity = points2Dint.ptr<double>(1);
+            double* itz = points2Dint.ptr<double>(2);
+
             //approximate of a/b but faster
-            int x = it->x * (1.0d / it->z);
-            int y = it->y * (1.0d / it->z);
+
+            int x = itx[l] * (1.0 / itz[l]);
+            int y = ity[l] * (1.0 / itz[l]);
             
+
+
             //for all non zero and in-bounds cords check if pixel is true (255) and increment the vote for the given voxel if yes
             
-            voxels[l][3] = (x && y && x < img_lim_x && y < img_lim_y && (int)img->at<uchar>(y,x)) ? ++voxels[l][3]: voxels[l][3];
+            voxels[l][3] = (x && y && x < img_lim_x && y < img_lim_y && (int)img.at<uchar>(y,x)) ? ++voxels[l][3]: voxels[l][3];
 
 
-            /////// equivalent to but slightly faster than:
-            /*
-            //if the point is out of bounds replace value with 0
-            if (x < 0 || img_lim_x < x) 
-            {
-                x = 0;
-            }
 
-            if (y < 0 || img_lim_y < y) 
-            {
-                y = 0;
-            }
-           
-            if (x && y && (int)images->at(i).at<uchar>(y,x))
-            {                
-                voxels[l][3] += 1;
-            }*/
                 
         }
 
@@ -447,32 +388,18 @@ std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<
     auto point3D_duration = std::chrono::duration_cast<std::chrono::microseconds>( point3Ddone - start );
     auto transpose_duration = std::chrono::duration_cast<std::chrono::microseconds>( transposeDone - point3Ddone );
     auto point2D_duration = std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::high_resolution_clock::now() - transposeDone );
-    std::cout << "Time taken making 3d points  : " << point3D_duration.count() /1000000.0d << " seconds" << std::endl;
-    std::cout << "Time taken transposing : " << transpose_duration.count() /1000000.0d << " seconds" << std::endl;
-    std::cout << "Time taken making 2d points : " << point2D_duration.count() /1000000.0d << " seconds" << std::endl;
-    //std::cout << images->at(0);
+    std::cout << "Time taken making 3d points  : " << point3D_duration.count() /1000000.0 << " seconds" << std::endl;
+    std::cout << "Time taken transposing : " << transpose_duration.count() /1000000.0 << " seconds" << std::endl;
+    std::cout << "Time taken making 2d points : " << point2D_duration.count() /1000000.0 << " seconds" << std::endl;
+
     return voxels;
 }
 
 
 
-// std::vector< std::vector <std::vector < double, std::allocator<double> > > > 
-
 void voxelListToFile(std::vector<std::array<double, 4>> voxelList)
 {
-    /*
-    std::vector< std::vector <std::vector < double, std::allocator<double> > > > voxel3D;
-    std::vector<double> xlim = {voxelList[0][0], voxelList[-1][0]};
-    std::vector<double> ylim = {voxelList[0][1], voxelList[-1][1]};
-    std::vector<double> zlim = {voxelList[0][2], voxelList[-1][2]};
-    cv::Mat v = voxels_number(xlim, ylim, zlim, voxel_size);
-0.07, -0.04
-    for (int l = 0; l < voxelList.size(); l++)
-    {
-        
-        
-    }
-        */
+
     
     std::ofstream voxelFile;
     voxelFile.open("voxelFile.csv");
@@ -489,12 +416,68 @@ void voxelListToFile(std::vector<std::array<double, 4>> voxelList)
 }
 
 
+void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<double, 4>> &voxels)
+{
+    cv::Mat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
+    for (int i = 0; i < voxels.size(); i++)
+    {
+
+        cv::Vec4d* it = object_points_3D.ptr<cv::Vec4d>(i);
+        
+        *it = {voxels[i][0], voxels[i][1], voxels[i][2], 1};
+        
+    }
+
+    object_points_3D = object_points_3D.t();
+
+
+
+    cv::Mat points2Dint, dummy;
+
+
+    //PROJECTION TO THE IMAGE PLANE
+    
+    cv::gemm(projection, object_points_3D, 1.0, dummy, 0, points2Dint);
+
+    cv::Mat img = image.clone();
+    
+    
+    int img_lim_x = img.cols;
+    int img_lim_y = img.rows;
+
+
+
+
+    for (int l = 0; l < points2Dint.cols; l++)
+    {
+            double* itx = points2Dint.ptr<double>(0);
+
+            double* ity = points2Dint.ptr<double>(1);
+            double* itz = points2Dint.ptr<double>(2);
+
+            //approximate of a/b but faster
+
+            int x = itx[l] * (1.0 / itz[l]);
+            int y = ity[l] * (1.0 / itz[l]);
+            
+        
+        //for all non zero and in-bounds cords check if pixel is true (255) and increment the vote for the given voxel if yes
+        
+        voxels[l][3] = (x && y && x < img_lim_x && y < img_lim_y  && (int)img.at<uchar>(y,x))? ++voxels[l][3]: voxels[l][3];
+
+
+
+            
+    }
+
+}
+
 
 int main() 
 {
 
     
-    
+    /*
 
     std::vector<cv::Mat> images;
 
@@ -531,9 +514,62 @@ int main()
     std::vector<double> zlim = {-0.07, 0.02};
     
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
-    
+*/
 
-    voxels = projectImagesOnvoxels(voxels, parameters, &images);
+    std::vector<cv::Mat> images;
+
+    std::vector<cv::Mat> contours;
+
+
+    std::string path = "../data/Test/";
+    std::string series = "test";
+    std::string output = "bin_images";
+    int numberOfimages = 1; 
+    std::vector<cv::Mat> projections;
+    std::vector<std::vector<std::string>> parameters;
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    std::cout << parameters[0][1] << '\n';    
+   
+    get_pmatrix(parameters, projections); 
+     
+
+    
+    images.push_back(cv::Mat(cv::imread(path + series + ".jpeg",cv::IMREAD_GRAYSCALE)));;
+
+    removeBackground(&images,30, 256);
+
+    applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
+
+    auto img_done_time = std::chrono::high_resolution_clock::now();
+
+
+
+    std::vector<double> voxel_size = {0.001, 0.001, 0.001};
+
+   
+    std::vector<double> xlim = {-0.07, 0.02};
+    std::vector<double> ylim = {-0.02, 0.07};
+    std::vector<double> zlim = {-0.07, 0.02};
+    
+    std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
+
+
+
+
+
+    for (int i = 0; i < numberOfimages; i++)
+    {
+        //cv::imshow("test",images[i]);
+        //cv::waitKey(1);
+        //std::cout << projections[i] << '\n';
+        updateVoxel(images[i],projections[i],voxels);
+
+    }
+
+
+    //voxels = projectImagesOnvoxels(voxels, parameters, &images);
 
     auto voxel_done_time = std::chrono::high_resolution_clock::now();
 
@@ -545,35 +581,6 @@ int main()
     
     voxelListToFile(voxels);
 
-    
-    /*
-    for (auto voxel : voxels)
-    {
-        for (int i = 0; i < 4; i++)
-        {
-            std::cout << voxel[i] << " ";
-        }
-        std::cout<< '\n';
-    }*/
-    
-
-    //showImages(&images);
-
-
-
-    //removeBackground(&images,30, 256);
-    
-    //showImages(&images);
-
-    //applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
-
-    //showImages(&images);
-
-    //findContours(&images, &contours, 10);
-    
-    //showImages(&images);
-
-    //cv::imshow("dino UwU", img);
 
     writeImages(&images, &path, &output);
 
