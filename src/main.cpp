@@ -295,108 +295,6 @@ std::string type2str(int type) {
 }
 
 
-
-
-
-
-std::vector<std::array<double, 4>> projectImagesOnvoxels(std::vector<std::array<double, 4>> &voxels, 
-                                                        std::vector<std::vector<std::string>> &parameters,
-                                                        std::vector<cv::Mat> *images)
-
-{
-
-
-   
-    
-    auto start = std::chrono::high_resolution_clock::now();
-
-    
-
-    
-    cv::Mat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
-    for (int i = 0; i < voxels.size(); i++)
-    {
-
-        cv::Vec4d* it = object_points_3D.ptr<cv::Vec4d>(i);
-        
-        *it = {voxels[i][0], voxels[i][1], voxels[i][2], 1};
-        
-    }
-
-
-    auto point3Ddone  = std::chrono::high_resolution_clock::now();
-    
-    object_points_3D = object_points_3D.t();
-    
-    auto transposeDone  = std::chrono::high_resolution_clock::now();
-
-    //CAMERA PARAMETERS
-    std::vector<cv::Mat> projection;
-    
-
-        
-    get_pmatrix(parameters, projection);
-    
-
-    
-    for (int i = 0; i < projection.size(); i++)
-    {
-        cv::Mat points2Dint, dummy;
-        cv::Mat img = images->at(i).clone();
-
-
-        //PROJECTION TO THE IMAGE PLANE
-        //points2Dint = projection[i] * object_points_3D;
-        cv::gemm(projection[i], object_points_3D, 1.0, dummy, 0, points2Dint);
-
-
-       
-        
-        int img_lim_x = img.cols;
-        int img_lim_y = img.rows;
-
-        //std::cout << points2Dint.cols << '\n';
-        //std::cout << points2Dint.rows << '\n';
-
-
-        for (int l = 0; l < points2Dint.cols ; l++)
-        {
-            
-            double* itx = points2Dint.ptr<double>(0);
-
-            double* ity = points2Dint.ptr<double>(1);
-            double* itz = points2Dint.ptr<double>(2);
-
-            //approximate of a/b but faster
-
-            int x = itx[l] * (1.0 / itz[l]);
-            int y = ity[l] * (1.0 / itz[l]);
-            
-
-
-            //for all non zero and in-bounds cords check if pixel is true (255) and increment the vote for the given voxel if yes
-            
-            voxels[l][3] = (x && y && x < img_lim_x && y < img_lim_y && (int)img.at<uchar>(y,x)) ? ++voxels[l][3]: voxels[l][3];
-
-
-
-                
-        }
-
-    }
-    
-    auto point3D_duration = std::chrono::duration_cast<std::chrono::microseconds>( point3Ddone - start );
-    auto transpose_duration = std::chrono::duration_cast<std::chrono::microseconds>( transposeDone - point3Ddone );
-    auto point2D_duration = std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::high_resolution_clock::now() - transposeDone );
-    std::cout << "Time taken making 3d points  : " << point3D_duration.count() /1000000.0 << " seconds" << std::endl;
-    std::cout << "Time taken transposing : " << transpose_duration.count() /1000000.0 << " seconds" << std::endl;
-    std::cout << "Time taken making 2d points : " << point2D_duration.count() /1000000.0 << " seconds" << std::endl;
-
-    return voxels;
-}
-
-
-
 void voxelListToFile(std::vector<std::array<double, 4>> voxelList)
 {
 
@@ -428,47 +326,40 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
         
     }
 
-    object_points_3D = object_points_3D.t();
+    
 
 
 
-    cv::Mat points2Dint, dummy;
+    cv::Mat projected2Dpoints, dummy;
 
 
     //PROJECTION TO THE IMAGE PLANE
-    
-    cv::gemm(projection, object_points_3D, 1.0, dummy, 0, points2Dint);
+    // Note: its faster to save the transpose and then pass it to GEMM than just pasing the transposed points idfk...
+    object_points_3D = object_points_3D.t();
+
+    cv::gemm(projection, object_points_3D, 1.0, dummy, 0, projected2Dpoints);
 
     cv::Mat img = image.clone();
     
-    
+    //NORMALIZE POINTS
     int img_lim_x = img.cols;
     int img_lim_y = img.rows;
 
+    cv::Mat normalized2Dpoints;
+   
+    cv::convertPointsFromHomogeneous(projected2Dpoints.t(), normalized2Dpoints);
 
-
-
-    for (int l = 0; l < points2Dint.cols; l++)
+    //CHECK IF COORDINATES ARE VALID AND THAT OBJECT IS SEEN IN PIXEL
+    for (int i = 0; i < normalized2Dpoints.rows; i++)
     {
-            double* itx = points2Dint.ptr<double>(0);
-
-            double* ity = points2Dint.ptr<double>(1);
-            double* itz = points2Dint.ptr<double>(2);
-
-            //approximate of a/b but faster
-
-            int x = itx[l] * (1.0 / itz[l]);
-            int y = ity[l] * (1.0 / itz[l]);
-            
         
-        //for all non zero and in-bounds cords check if pixel is true (255) and increment the vote for the given voxel if yes
-        
-        voxels[l][3] = (x && y && x < img_lim_x && y < img_lim_y  && (int)img.at<uchar>(y,x))? ++voxels[l][3]: voxels[l][3];
+        int x = (int)(*normalized2Dpoints.ptr<double>(i));
+        int y = (int)(*normalized2Dpoints.ptr<double>(i));
 
-
-
-            
+        // fast if statement for better handeling of context switch (++voxel is asumed)
+        voxels[i][3] = (x && y && x < img_lim_x && y < img_lim_y && (int)img.at<uchar>(y,x)) ? ++voxels[i][3]: voxels[i][3];
     }
+    
 
 }
 
@@ -476,8 +367,7 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
 int main() 
 {
 
-    
-    /*
+ 
 
     std::vector<cv::Mat> images;
 
@@ -514,47 +404,6 @@ int main()
     std::vector<double> zlim = {-0.07, 0.02};
     
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
-*/
-
-    std::vector<cv::Mat> images;
-
-    std::vector<cv::Mat> contours;
-
-
-    std::string path = "../data/Test/";
-    std::string series = "test";
-    std::string output = "bin_images";
-    int numberOfimages = 1; 
-    std::vector<cv::Mat> projections;
-    std::vector<std::vector<std::string>> parameters;
-
-    auto start = std::chrono::high_resolution_clock::now();
-
-    std::cout << parameters[0][1] << '\n';    
-   
-    get_pmatrix(parameters, projections); 
-     
-
-    
-    images.push_back(cv::Mat(cv::imread(path + series + ".jpeg",cv::IMREAD_GRAYSCALE)));;
-
-    removeBackground(&images,30, 256);
-
-    applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
-
-    auto img_done_time = std::chrono::high_resolution_clock::now();
-
-
-
-    std::vector<double> voxel_size = {0.001, 0.001, 0.001};
-
-   
-    std::vector<double> xlim = {-0.07, 0.02};
-    std::vector<double> ylim = {-0.02, 0.07};
-    std::vector<double> zlim = {-0.07, 0.02};
-    
-    std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
-
 
 
 
@@ -579,6 +428,7 @@ int main()
     std::cout << "Time taken by loading images  : " << img_duration.count() /1000000.0 << " seconds" << std::endl;
     std::cout << "Time taken by voxel generation: " << voxel_duration.count() /1000000.0 << " seconds" << std::endl;
     
+    std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
     voxelListToFile(voxels);
 
 
