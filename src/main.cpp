@@ -477,8 +477,7 @@ int main()
 {
 
     
-    /*
-
+   
     std::vector<cv::Mat> images;
 
     std::vector<cv::Mat> contours;
@@ -514,7 +513,8 @@ int main()
     std::vector<double> zlim = {-0.07, 0.02};
     
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
-*/
+ /*
+
 
     std::vector<cv::Mat> images;
 
@@ -556,7 +556,7 @@ int main()
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
 
 
-
+ */
 
 
     for (int i = 0; i < numberOfimages; i++)
