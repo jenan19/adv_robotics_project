@@ -316,6 +316,8 @@ void voxelListToFile(std::vector<std::array<double, 4>> voxelList)
 
 void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<double, 4>> &voxels)
 {
+
+    //GENERATE LIST OF HOMOGENOUS 3D POINTS FROM VOXELS (the score is ignored and replaced with 1)
     cv::Mat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
     for (int i = 0; i < voxels.size(); i++)
     {
