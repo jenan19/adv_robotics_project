@@ -10,7 +10,15 @@
 #include <opencv2/core.hpp>
 #include <pcl/common/common.h>
 #include <pcl/common/angles.h>
-
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/console/parse.h>
+#include <pcl/search/kdtree.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/surface/gp3.h>
+#include <pcl/io/vtk_io.h>
 //#include <open3d/Open3D.h>      //Den her laver noget mærkeligt 
 
 
@@ -99,12 +107,6 @@ void findContours(std::vector<cv::Mat> *images, std::vector<cv::Mat> *contours, 
 }
 
 
-void makeBinary(std::vector<cv::Mat> *images)
-{
-
-
-}
-
 
 
 void showImages(std::vector<cv::Mat> *images)
@@ -133,6 +135,7 @@ void read_parameters(std::string file_path,std::vector<std::vector<std::string>>
             while(std::getline(p_line, element, ' '))
             {
                 parameters[parameters.size()-1].push_back(element);
+                //std::cout << element;
             }
         }
     } 
@@ -145,31 +148,37 @@ void get_pmatrix(std::vector<std::vector<std::string>> parameters, std::vector<c
     cv::Mat R(3,3, cv::DataType<double>::type);
     cv::Mat t(3,1, cv::DataType<double>::type);
     cv::Mat E(3,4, cv::DataType<double>::type); 
-    
     for(int i = 0; i < parameters.size(); i++)
     { 
         int count = 1;
+        
         for(int row = 0; row < 3; row++)
         { 
             for(int col = 0; col < 3; col++)
             {
-                K.at<double>(row,col) = std::stod(parameters[i][count]); 
+                //std::cout << parameters[i][count] << " ";
+                K.at<double>(row,col) = std::stod(parameters[i][count]);
                 count++; 
             }
         } 
+        //std::cout << "\n";
         for(int row = 0; row < 3; row++) 
         { 
             for(int col = 0; col < 3; col++)
             {
-                R.at<double>(row,col) = std::stod(parameters[i][count]); 
+                R.at<double>(row,col) = std::stod(parameters[i][count]);
+                //std::cout << parameters[i][count] << " ";
                 count++; 
             }
         }
+        //std::cout << "\n";
         for(int row = 0; row < 3; row++) 
         { 
-            t.at<double>(row,0) = std::stod(parameters[i][count]); 
+            t.at<double>(row,0) = std::stod(parameters[i][count]);
+            //std::cout << parameters[i][count] << " ";
             count++; 
         }
+        //std::cout << "\n";
         
 
         cv::hconcat(R,t,E);
@@ -318,7 +327,6 @@ void voxelListToFile(std::vector<std::array<double, 4>> voxelList)
 
 void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<double, 4>> &voxels)
 {
-
     //GENERATE LIST OF HOMOGENOUS 3D POINTS FROM VOXELS (the score is ignored and replaced with 1)
     cv::Mat object_points_3D(voxels.size(), 4,cv::DataType<double>::type);
     for (int i = 0; i < voxels.size(); i++)
@@ -327,10 +335,9 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
         cv::Vec4d* it = object_points_3D.ptr<cv::Vec4d>(i);
         
         *it = {voxels[i][0], voxels[i][1], voxels[i][2], 1};
-        
+        //std::cout << *it << '\n';
     }
 
-    
 
 
 
@@ -340,7 +347,6 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
     //PROJECTION TO THE IMAGE PLANE
     // Note: its faster to save the transpose and then pass it to GEMM than just pasing the transposed points idfk...
     object_points_3D = object_points_3D.t();
-
     cv::gemm(projection, object_points_3D, 1.0, dummy, 0, projected2Dpoints);
 
     cv::Mat img = image.clone();
@@ -348,83 +354,226 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
     //NORMALIZE POINTS
     int img_lim_x = img.cols;
     int img_lim_y = img.rows;
-
     cv::Mat normalized2Dpoints;
     projected2Dpoints = projected2Dpoints.t();
     cv::convertPointsFromHomogeneous(projected2Dpoints, normalized2Dpoints);
-
+ 
     //CHECK IF COORDINATES ARE VALID AND THAT OBJECT IS SEEN IN PIXEL
     for (int i = 0; i < normalized2Dpoints.rows; i++)
     {
-        
-        int x = (int)(*normalized2Dpoints.ptr<double>(i));
-        int y = (int)(*normalized2Dpoints.ptr<double>(i));
+        //std::cout << *normalized2Dpoints.ptr<cv::Point2d>(i) << '\n';
+        int x = normalized2Dpoints.ptr<cv::Point2d>(i)->x;
+        int y = normalized2Dpoints.ptr<cv::Point2d>(i)->y;
+        //std:: cout <<  << " " << normalized2Dpoints.cols << '\n';
 
         // fast if statement for better handeling of context switch (++voxel is asumed)
-        voxels[i][3] = (x && y && x < img_lim_x && y < img_lim_y && (int)img.at<uchar>(y,x)) ? ++voxels[i][3]: voxels[i][3];
+        voxels[i][3] = (0 < x && 0 < y && x < img_lim_x && y < img_lim_y && (int)img.at<uchar>(y,x)) ? ++voxels[i][3]: voxels[i][3];
     }
-    
+    std::cout << "done... " << '\n';
 
 }
+
+
+bool compareScores(const std::array<double, 4> &pointA, const std::array<double, 4> &pointB)
+{
+    return pointA[3] > pointB[3];
+}
+
+pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4>> voxels)
+{
+    pcl::PointCloud<pcl::PointXYZ> cloud;
+    
+
+    //sort from highest score to min
+    std::sort(voxels.begin(), voxels.end(), compareScores);
+    // Fill in the cloud data
+    // cloud.width    = voxels.size();
+    // cloud.height   = 1;
+    // cloud.is_dense = false;
+    // cloud.resize (cloud.width * cloud.height);
+    
+    double maxv = voxels[0][3];
+
+    double iso_value = maxv - (int)((maxv / 100.0) * 20);
+    std::cerr << "MAX " << maxv << " iso " << iso_value << std::endl;
+    //int i = 0;
+    for (int i = 0; i <voxels.size(); i++)
+    {
+        std::array<double, 4> voxel = voxels[i];
+        
+        if(voxel[3] >= iso_value)
+        {
+            pcl::PointXYZ pt(voxel[0], voxel[1], voxel[2]);
+
+            cloud.push_back(pt);
+            
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
+    std::cerr << "Saved " << cloud.size () << " data points to test_pcd.pcd." << std::endl;
+    
+    return cloud;
+}
+
+
+
+
+
+
+pcl::visualization::PCLVisualizer::Ptr simpleVis (pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud)
+{
+  // --------------------------------------------
+  // -----Open 3D viewer and add point cloud-----
+  // --------------------------------------------
+  pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+  viewer->setBackgroundColor (0, 0, 0);
+  viewer->addPointCloud<pcl::PointXYZ> (cloud, "sample cloud");
+  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
+  viewer->addCoordinateSystem (1.0);
+  viewer->initCameraParameters ();
+  return (viewer);
+}
+
+
+
+void fastTriangulation(pcl::PointCloud<pcl::PointXYZ> cloud_)
+{
+    std::cout << "NORMAL ESTIMATION... " << '\n';
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud  (new pcl::PointCloud<pcl::PointXYZ>(cloud_));
+    // Normal estimation*
+    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
+    pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+    tree->setInputCloud (cloud);
+    n.setInputCloud (cloud);
+    n.setSearchMethod (tree);
+    n.setKSearch (20);
+    n.compute (*normals);
+    //* normals should not contain the point normals + surface curvatures
+    std::cout << "Concatenate... " << '\n';
+    // Concatenate the XYZ and normal fields*
+    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals (new pcl::PointCloud<pcl::PointNormal>);
+    pcl::concatenateFields (*cloud, *normals, *cloud_with_normals);
+    //* cloud_with_normals = cloud + normals
+
+    std::cout << "Create search tree... " << '\n';
+    // Create search tree*
+    pcl::search::KdTree<pcl::PointNormal>::Ptr tree2 (new pcl::search::KdTree<pcl::PointNormal>);
+    tree2->setInputCloud (cloud_with_normals);
+
+    std::cout << "init objects... " << '\n';
+    // Initialize objects
+    pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;
+    pcl::PolygonMesh triangles;
+
+    // Set the maximum distance between connected points (maximum edge length)
+    gp3.setSearchRadius (0.025);
+
+    // Set typical values for the parameters
+    gp3.setMu (2.5);
+    gp3.setMaximumNearestNeighbors (150);
+    gp3.setMaximumSurfaceAngle(M_PI/4); // 45 degrees
+    gp3.setMinimumAngle(M_PI/18); // 10 degrees
+    gp3.setMaximumAngle(2*M_PI/3); // 120 degrees
+    gp3.setNormalConsistency(false);
+
+    std::cout << "Search... " << '\n';
+    // Get result
+    gp3.setInputCloud (cloud_with_normals);
+    gp3.setSearchMethod (tree2);
+    gp3.reconstruct (triangles);
+
+    // Additional vertex information
+    std::vector<int> parts = gp3.getPartIDs();
+    std::vector<int> states = gp3.getPointStates();
+
+
+    std::cout << "Save... " << '\n';
+    pcl::io::saveVTKFile("mesh.vtk", triangles); 
+    std::cout << "Done... " << '\n';
+}
+
+
 
 
 int main() 
 {
 
-    float alpha = 0.25;
-    float beta;
-    std::cout << "angle in radian is : " << alpha << std::endl;
-    beta = pcl::rad2deg(alpha);
-    std::cout << "angle in degrees is : " << beta << std::endl;
+
+    
     std::vector<cv::Mat> images;
 
     std::vector<cv::Mat> contours;
 
 
-    std::string path = "../data/DinoSR/";
-    std::string series = "dinoSR";
+    std::string path = "../data/kiwi/";
+    std::string series = "kiwi";
     std::string output = "bin_images";
-    int numberOfimages = 16; 
+    int numberOfimages = 37; 
     std::vector<cv::Mat> projections;
     std::vector<std::vector<std::string>> parameters;
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    read_parameters(path + "dinoSR_par.txt", parameters);
+    std::cout << "read params... " << '\n';
+    read_parameters(path + series + "_par.txt", parameters);
+    std::cout << "get pmatrix... " << '\n';
     get_pmatrix(parameters, projections); 
     
+
+    
+    std::cout << "loading imgs... " << '\n';
     loadImages(&path, &series, &images, numberOfimages);
-
-    removeBackground(&images,30, 256);
-
+    std::cout << "removing background... " << '\n'; 
+    //showImages(&images); 
+    removeBackground(&images,0, 200);
+    //showImages(&images);
+    std::cout << "morphing.. " << '\n';
     applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
+
+    writeImages(&images, &path, &output);
+
+    //showImages(&images);
 
     auto img_done_time = std::chrono::high_resolution_clock::now();
 
 
 
-    std::vector<double> voxel_size = {0.001, 0.001, 0.001};
+    std::vector<double> voxel_size = {0.01, 0.01, 0.01};
 
    
-    std::vector<double> xlim = {-0.07, 0.02};
-    std::vector<double> ylim = {-0.02, 0.07};
-    std::vector<double> zlim = {-0.07, 0.02};
+    std::vector<double> xlim = {-1, 1};
+    std::vector<double> ylim = {-1, 1};
+    std::vector<double> zlim = {-1, 1};
     
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
 
-
-
-
+    //pcl::PointCloud<pcl::PointXYZ>::Ptr vizualizer (new pcl::PointCloud<pcl::PointXYZ>);
+    std::cout << "running.. " << '\n';
+    pcl::visualization::PCLVisualizer::Ptr viewer;
+    pcl::PointCloud<pcl::PointXYZ> cloud;
     for (int i = 0; i < numberOfimages; i++)
     {
-        //cv::imshow("test",images[i]);
-        //cv::waitKey(1);
-        //std::cout << projections[i] << '\n';
+        
         updateVoxel(images[i],projections[i],voxels);
+
+        cloud = updatePointCloud(voxels);
+        
+        //vizualizer.reset( new pcl::PointCloud<pcl::PointXYZ>(cloud));
+
+        //viewer = simpleVis(vizualizer);
+
+        //viewer->spinOnce(1);
 
     }
 
-
+    //fastTriangulation(cloud);
     //voxels = projectImagesOnvoxels(voxels, parameters, &images);
 
     auto voxel_done_time = std::chrono::high_resolution_clock::now();
@@ -439,7 +588,7 @@ int main()
     voxelListToFile(voxels);
 
 
-    writeImages(&images, &path, &output);
+    
 
     //cv::waitKey(1);
 
