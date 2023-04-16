@@ -8,6 +8,8 @@
 #include <fstream>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
+#include <pcl/common/common.h>
+#include <pcl/common/angles.h>
 
 //#include <open3d/Open3D.h>      //Den her laver noget mærkeligt 
 
@@ -348,8 +350,8 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
     int img_lim_y = img.rows;
 
     cv::Mat normalized2Dpoints;
-   
-    cv::convertPointsFromHomogeneous(projected2Dpoints.t(), normalized2Dpoints);
+    projected2Dpoints = projected2Dpoints.t();
+    cv::convertPointsFromHomogeneous(projected2Dpoints, normalized2Dpoints);
 
     //CHECK IF COORDINATES ARE VALID AND THAT OBJECT IS SEEN IN PIXEL
     for (int i = 0; i < normalized2Dpoints.rows; i++)
@@ -369,8 +371,11 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
 int main() 
 {
 
- 
-
+    float alpha = 0.25;
+    float beta;
+    std::cout << "angle in radian is : " << alpha << std::endl;
+    beta = pcl::rad2deg(alpha);
+    std::cout << "angle in degrees is : " << beta << std::endl;
     std::vector<cv::Mat> images;
 
     std::vector<cv::Mat> contours;
