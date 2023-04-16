@@ -50,11 +50,16 @@ find_package(OpenCV REQUIRED)
 #find_package(Open3D REQUIRED)
 
 find_package(Eigen3 REQUIRED)
-
-
+find_package(PCL REQUIRED)
+include_directories(/usr/local/include/eigen3)
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${EIGEN3_INCLUDE_DIRS})
-include_directories(${Open3D_INCLUDE_DIRS})
+
+
+
 message(STATUS ${EIGEN3_INCLUDE_DIRS})
 message(STATUS ${OpenCV_INCLUDE_DIRS})
 
@@ -63,4 +68,4 @@ message(STATUS ${Open3D_INCLUDE_DIRS})
 
 add_executable(visualHull ../src/main.cpp)
 
-target_link_libraries(visualHull  ${OpenCV_LIBS} )
+target_link_libraries(visualHull  ${OpenCV_LIBS}  ${PCL_LIBRARIES})
