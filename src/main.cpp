@@ -181,7 +181,11 @@ void get_pmatrix(std::vector<std::vector<std::string>> parameters, std::vector<c
         //std::cout << "\n";
         
 
-        cv::hconcat(R,t,E);
+        cv::Mat z90deg = (cv::Mat_<double>(3,3) << 0, -1, 0, 1, 0, 0, 0, 0, 1);
+
+        R = R * z90deg;
+
+        cv::hconcat(R.t(),(-R.t()*t),E);
 
         projections.push_back(K*E); 
     }
@@ -545,12 +549,12 @@ int main()
 
 
 
-    std::vector<double> voxel_size = {0.01, 0.01, 0.01};
+    std::vector<double> voxel_size = {0.001, 0.001, 0.001};
 
    
-    std::vector<double> xlim = {-1, 1};
-    std::vector<double> ylim = {-1, 1};
-    std::vector<double> zlim = {-1, 1};
+    std::vector<double> xlim = {-0.2, 0.2};
+    std::vector<double> ylim = {-0.2, 0.2};
+    std::vector<double> zlim = {-0.5, 0.5};
     
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
 
@@ -563,7 +567,7 @@ int main()
         
         updateVoxel(images[i],projections[i],voxels);
 
-        cloud = updatePointCloud(voxels);
+        
         
         //vizualizer.reset( new pcl::PointCloud<pcl::PointXYZ>(cloud));
 
@@ -573,6 +577,7 @@ int main()
 
     }
 
+    cloud = updatePointCloud(voxels);
     //fastTriangulation(cloud);
     //voxels = projectImagesOnvoxels(voxels, parameters, &images);
 
@@ -587,9 +592,17 @@ int main()
     std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
     voxelListToFile(voxels);
 
+/*
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPTR(new pcl::PointCloud<pcl::PointXYZ>::Ptr );
+    *cloudPTR = updatePointCloud(voxels);
+    viewer = simpleVis(cloudPTR);
+    while (!viewer->wasStopped ())
+    {
+        viewer->spinOnce (100);
 
+    }
     
-
+*/
     //cv::waitKey(1);
 
     return 1;
