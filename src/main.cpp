@@ -519,7 +519,7 @@ int main()
     std::string path = "../data/kiwi/";
     std::string series = "kiwi";
     std::string output = "bin_images";
-    int numberOfimages = 37; 
+    int numberOfimages = 36; 
     std::vector<cv::Mat> projections;
     std::vector<std::vector<std::string>> parameters;
 
@@ -552,9 +552,9 @@ int main()
     std::vector<double> voxel_size = {0.001, 0.001, 0.001};
 
    
-    std::vector<double> xlim = {-0.2, 0.2};
-    std::vector<double> ylim = {-0.2, 0.2};
-    std::vector<double> zlim = {-0.5, 0.5};
+    std::vector<double> xlim = {-0.12, 0.12};
+    std::vector<double> ylim = {-0.12, 0.12};
+    std::vector<double> zlim = {-0.04, 0.16};
     
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
 
