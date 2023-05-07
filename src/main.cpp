@@ -527,7 +527,7 @@ pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4
     
     double maxv = voxels[0][3];
 
-    double iso_value = maxv - (int)((maxv / 100.0) * 20);
+    double iso_value = maxv - (int)((maxv / 100.0) * 5);
     std::cerr << "MAX " << maxv << " iso " << iso_value << std::endl;
     //int i = 0;
     for (int i = 0; i <voxels.size(); i++)
@@ -654,10 +654,9 @@ int main(int argc, char** argv)
     loadImages(&path, &series, &images, numberOfimages);
     std::cout << "removing background... " << '\n'; 
     //showImages(&images); 
-    removeBackground(&images,0, 200);
+    removeBackground(&images,0, 220);
     //showImages(&images);
-    std::cout << "morphing.. " << '\n';
-    applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
+    //applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
 
     writeImages(&images, &path, &output);
 
@@ -673,11 +672,27 @@ int main(int argc, char** argv)
     std::vector<double> xlim = {boundingBox[0], boundingBox[1]};
     std::vector<double> ylim = {boundingBox[2], boundingBox[3]};
     std::vector<double> zlim = {boundingBox[4], boundingBox[5]};
-    
-    double x_size = std::abs(boundingBox[0] - boundingBox[1]) / 100;
-    double y_size = std::abs(boundingBox[2] - boundingBox[3]) / 100;
-    double z_size = std::abs(boundingBox[4] - boundingBox[5]) / 100;
 
+    // xlim = {-0.0090005951, 0.0090005951};
+    // ylim = {-0.0089972029 0.0089972029};
+    // zlim = {-0.04, 0.003};
+
+
+    std::cout << boundingBox[4] << " " << boundingBox[5] << std::endl; 
+    
+    double distanceXYZ = std::abs(boundingBox[0] - boundingBox[1]) + std::abs(boundingBox[0] - boundingBox[1]) + std::abs(boundingBox[4] - boundingBox[5]);
+
+    double percentX = std::abs(xlim[0] - xlim[1]) / distanceXYZ;
+    double percentY = std::abs(ylim[0] - ylim[1]) / distanceXYZ;
+    double percentZ = std::abs(zlim[0] - zlim[1]) / distanceXYZ;
+
+
+
+    double x_size = std::abs(xlim[0] - xlim[1]) / (100 * percentX * 4);
+    double y_size = std::abs(ylim[0] - ylim[1]) / (100 * percentY * 4);
+    double z_size = std::abs(zlim[0] - zlim[1]) / (100 * percentZ * 4);
+
+    std::cout << x_size << " " << y_size << " " << z_size << '\n'; 
     std::vector<double> voxel_size = {x_size, y_size, z_size};
 
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);

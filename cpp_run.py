@@ -17,7 +17,7 @@ if (len(pathlist) > 0):
         path = i
         series = i.split("/")[-1]
         print(path, series)
-        runString = run + " " + str(imagesAmount) + " " + path + " " + series
+        runString = run + " " + str(imagesAmount) + " " + path + "/" + " " + series
         sub.run(runString, shell=True)
 else:
     runString = run + " " + str(imagesAmount) + " " + path + " " + series
