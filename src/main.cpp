@@ -11,6 +11,7 @@
 #include <pcl/common/common.h>
 #include <pcl/common/angles.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/io/ply_io.h>
 #include <pcl/point_types.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/visualization/pcl_visualizer.h>
@@ -19,6 +20,9 @@
 #include <pcl/features/normal_3d.h>
 #include <pcl/surface/gp3.h>
 #include <pcl/io/vtk_io.h>
+#include <pcl/surface/marching_cubes.h>
+#include <pcl/surface/marching_cubes_rbf.h>
+#include <stdlib.h>
 //#include <open3d/Open3D.h>      //Den her laver noget mærkeligt 
 
 
@@ -373,7 +377,7 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
         // fast if statement for better handeling of context switch (++voxel is asumed)
         voxels[i][3] = (0 < x && 0 < y && x < img_lim_x && y < img_lim_y && (int)img.at<uchar>(y,x)) ? ++voxels[i][3]: voxels[i][3];
     }
-    std::cout << "done... " << '\n';
+    
 
 }
 
@@ -383,65 +387,8 @@ bool compareScores(const std::array<double, 4> &pointA, const std::array<double,
     return pointA[3] > pointB[3];
 }
 
-pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4>> voxels)
-{
-    pcl::PointCloud<pcl::PointXYZ> cloud;
-    
-
-    //sort from highest score to min
-    std::sort(voxels.begin(), voxels.end(), compareScores);
-    // Fill in the cloud data
-    // cloud.width    = voxels.size();
-    // cloud.height   = 1;
-    // cloud.is_dense = false;
-    // cloud.resize (cloud.width * cloud.height);
-    
-    double maxv = voxels[0][3];
-
-    double iso_value = maxv - (int)((maxv / 100.0) * 20);
-    std::cerr << "MAX " << maxv << " iso " << iso_value << std::endl;
-    //int i = 0;
-    for (int i = 0; i <voxels.size(); i++)
-    {
-        std::array<double, 4> voxel = voxels[i];
-        
-        if(voxel[3] >= iso_value)
-        {
-            pcl::PointXYZ pt(voxel[0], voxel[1], voxel[2]);
-
-            cloud.push_back(pt);
-            
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
-    std::cerr << "Saved " << cloud.size () << " data points to test_pcd.pcd." << std::endl;
-    
-    return cloud;
-}
 
 
-
-
-
-
-pcl::visualization::PCLVisualizer::Ptr simpleVis (pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud)
-{
-  // --------------------------------------------
-  // -----Open 3D viewer and add point cloud-----
-  // --------------------------------------------
-  pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
-  viewer->setBackgroundColor (0, 0, 0);
-  viewer->addPointCloud<pcl::PointXYZ> (cloud, "sample cloud");
-  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
-  viewer->addCoordinateSystem (1.0);
-  viewer->initCameraParameters ();
-  return (viewer);
-}
 
 
 
@@ -499,27 +446,186 @@ void fastTriangulation(pcl::PointCloud<pcl::PointXYZ> cloud_)
 
 
     std::cout << "Save... " << '\n';
-    pcl::io::saveVTKFile("mesh.vtk", triangles); 
+    pcl::io::savePLYFileBinary("mesh.ply", triangles); 
+    std::cout << "Done... " << '\n';
+}
+
+
+void marchingCubes(pcl::PointCloud<pcl::PointXYZ> cloud_)
+{
+    std::cout << "NORMAL ESTIMATION... " << '\n';
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud  (new pcl::PointCloud<pcl::PointXYZ>(cloud_));
+    // Normal estimation*
+    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
+    pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+    tree->setInputCloud (cloud);
+    n.setInputCloud (cloud);
+    n.setSearchMethod (tree);
+    n.setKSearch (20);
+    n.compute (*normals);
+    //* normals should not contain the point normals + surface curvatures
+    std::cout << "Concatenate... " << '\n';
+    // Concatenate the XYZ and normal fields*
+    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals (new pcl::PointCloud<pcl::PointNormal>);
+    pcl::concatenateFields (*cloud, *normals, *cloud_with_normals);
+    //* cloud_with_normals = cloud + normals
+
+    std::cout << "Create search tree... " << '\n';
+    // Create search tree*
+    pcl::search::KdTree<pcl::PointNormal>::Ptr tree2 (new pcl::search::KdTree<pcl::PointNormal>);
+    tree2->setInputCloud (cloud_with_normals);
+
+    std::cout << "init objects... " << '\n';
+    // Initialize objects
+    pcl::MarchingCubesRBF<pcl::PointNormal> mc;
+    pcl::PolygonMesh triangles;
+
+
+    std::cout << "Search... " << '\n';
+    // Get result
+    mc.setInputCloud (cloud_with_normals);
+    mc.setSearchMethod (tree2);
+    mc.setGridResolution (100, 100, 100);
+    mc.reconstruct (triangles);
+
+
+
+    std::cout << "Save... " << '\n';
+    pcl::io::savePLYFileBinary("mesh.ply", triangles); 
     std::cout << "Done... " << '\n';
 }
 
 
 
 
-int main() 
+
+pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4>> voxels, std::string name)
+{
+    pcl::PointCloud<pcl::PointXYZ> cloud;
+    
+
+    //sort from highest score to min
+    std::sort(voxels.begin(), voxels.end(), compareScores);
+    // Fill in the cloud data
+    // cloud.width    = voxels.size();
+    // cloud.height   = 1;
+    // cloud.is_dense = false;
+    // cloud.resize (cloud.width * cloud.height);
+    
+    double maxv = voxels[0][3];
+
+    double iso_value = maxv - (int)((maxv / 100.0) * 20);
+    std::cerr << "MAX " << maxv << " iso " << iso_value << std::endl;
+    //int i = 0;
+    for (int i = 0; i <voxels.size(); i++)
+    {
+        std::array<double, 4> voxel = voxels[i];
+        
+        if(voxel[3] >= iso_value)
+        {
+            pcl::PointXYZ pt(voxel[0], voxel[1], voxel[2]);
+
+            cloud.push_back(pt);
+            
+        }
+        else
+        {
+            break;
+        }
+    }
+
+
+    const char* home = getenv("HOME");
+    std::string HOME = home;
+    std::string pathFolder = HOME + "/adv_robotics_project/plyFiles/";
+    std::string pathFile = name;
+
+    std::cout << "Saving to .ply" << std::endl;
+    
+
+
+
+
+    //fastTriangulation(cloud);
+
+
+    pcl::io::savePLYFileBinary(pathFolder + pathFile + ".ply", cloud);
+    //pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
+    std::cerr << "Saved " << cloud.size () << " data points to " << pathFolder + pathFile << ".ply" << std::endl;
+    
+    return cloud;
+}
+
+
+
+
+
+
+pcl::visualization::PCLVisualizer::Ptr simpleVis (pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud)
+{
+  // --------------------------------------------
+  // -----Open 3D viewer and add point cloud-----
+  // --------------------------------------------
+  pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
+  viewer->setBackgroundColor (0, 0, 0);
+  viewer->addPointCloud<pcl::PointXYZ> (cloud, "sample cloud");
+  viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
+  viewer->addCoordinateSystem (1.0);
+  viewer->initCameraParameters ();
+  return (viewer);
+}
+
+
+
+
+
+
+
+
+int main(int argc, char** argv) 
 {
 
 
-    
+    const char* home = getenv("HOME");
+    std::string HOME = home;
     std::vector<cv::Mat> images;
 
     std::vector<cv::Mat> contours;
 
-
-    std::string path = "../data/kiwi/";
+    std::string path = HOME + "/adv_robotics_project/data/kiwi/";
     std::string series = "kiwi";
-    std::string output = "bin_images";
     int numberOfimages = 36; 
+
+
+    if (argc > 1)
+        try
+        {
+            numberOfimages = std::stoi(argv[1]) ;
+        }
+        catch(const std::exception& e)
+        {
+            std::cerr << "ERROR!: Not a number, using 36 images" << '\n';
+        }
+        
+        
+    if (argc > 3)
+    {
+
+        path = argv[2];
+        series = argv[3];
+    }
+
+
+    std::cout << "Amount of images: "<< numberOfimages << '\n'; 
+
+    std::cout << "Path to folder: " << path << '\n';
+
+    std::cout << "Name of series: " << series << '\n';
+
+    std::string output = "bin_images";
+
     std::vector<cv::Mat> projections;
     std::vector<std::vector<std::string>> parameters;
 
@@ -549,7 +655,7 @@ int main()
 
 
 
-    std::vector<double> voxel_size = {0.001, 0.001, 0.001};
+    std::vector<double> voxel_size = {0.003, 0.003, 0.003};
 
    
     std::vector<double> xlim = {-0.12, 0.12};
@@ -567,8 +673,8 @@ int main()
         
         updateVoxel(images[i],projections[i],voxels);
 
-        
-        
+
+        std::cout << "Updated voxel for " << i + 1 << "/" << numberOfimages << '\n' ;
         //vizualizer.reset( new pcl::PointCloud<pcl::PointXYZ>(cloud));
 
         //viewer = simpleVis(vizualizer);
@@ -577,7 +683,7 @@ int main()
 
     }
 
-    cloud = updatePointCloud(voxels);
+    cloud = updatePointCloud(voxels,series);
     //fastTriangulation(cloud);
     //voxels = projectImagesOnvoxels(voxels, parameters, &images);
 
@@ -590,7 +696,7 @@ int main()
     std::cout << "Time taken by voxel generation: " << voxel_duration.count() /1000000.0 << " seconds" << std::endl;
     
     std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
-    voxelListToFile(voxels);
+    //voxelListToFile(voxels);
 
 /*
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPTR(new pcl::PointCloud<pcl::PointXYZ>::Ptr );
