@@ -643,16 +643,16 @@ int main(int argc, char** argv)
     std::vector<double> boundingBox;
     auto start = std::chrono::high_resolution_clock::now();
 
-    std::cout << "read params... " << '\n';
+    //std::cout << "read params... " << '\n';
     read_parameters(path + series + "_par.txt", parameters, boundingBox);
-    std::cout << "get pmatrix... " << '\n';
+    //std::cout << "get pmatrix... " << '\n';
     get_pmatrix(parameters, projections); 
     
 
     
     std::cout << "loading imgs... " << '\n';
     loadImages(&path, &series, &images, numberOfimages);
-    std::cout << "removing background... " << '\n'; 
+    //std::cout << "removing background... " << '\n'; 
     //showImages(&images); 
     removeBackground(&images,0, 220);
     //showImages(&images);
@@ -678,9 +678,8 @@ int main(int argc, char** argv)
     // zlim = {-0.04, 0.003};
 
 
-    std::cout << boundingBox[4] << " " << boundingBox[5] << std::endl; 
     
-    double distanceXYZ = std::abs(boundingBox[0] - boundingBox[1]) + std::abs(boundingBox[0] - boundingBox[1]) + std::abs(boundingBox[4] - boundingBox[5]);
+    double distanceXYZ = std::abs(xlim[0] - xlim[1]) + std::abs(ylim[0] - ylim[1]) + std::abs(zlim[0] - zlim[1]);
 
     double percentX = std::abs(xlim[0] - xlim[1]) / distanceXYZ;
     double percentY = std::abs(ylim[0] - ylim[1]) / distanceXYZ;
@@ -692,7 +691,8 @@ int main(int argc, char** argv)
     double y_size = std::abs(ylim[0] - ylim[1]) / (100 * percentY * 4);
     double z_size = std::abs(zlim[0] - zlim[1]) / (100 * percentZ * 4);
 
-    std::cout << x_size << " " << y_size << " " << z_size << '\n'; 
+    //std::cout << x_size << " " << y_size << " " << z_size << '\n'; 
+    
     std::vector<double> voxel_size = {x_size, y_size, z_size};
 
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
