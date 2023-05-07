@@ -40,7 +40,7 @@ void loadImages(std::string *path, std::string *seriesName,std::vector<cv::Mat> 
     for (int i = 0; i < numberOfImages; i++)
     {
         // pushback images
-        images->push_back(cv::Mat(cv::imread(*path + *seriesName + std::to_string(i + 1) + ".png",cv::IMREAD_GRAYSCALE)));
+        images->push_back(cv::Mat(cv::imread(*path + *seriesName + "_" + std::to_string(i + 1) + ".png",cv::IMREAD_GRAYSCALE)));
     }
     
 }
@@ -50,7 +50,7 @@ void writeImages(std::vector<cv::Mat> *images,std::string *path, std::string *se
     for (int i = 0; i < images->size(); i++)
     {
         // pushback images
-        cv::imwrite(*path + *seriesName + std::to_string(i + 1) + ".png", images->at(i));
+        cv::imwrite(*path + *seriesName +  "_" + std::to_string(i + 1) + ".png", images->at(i));
     }
 }
 
@@ -123,14 +123,23 @@ void showImages(std::vector<cv::Mat> *images)
 }
 
 
-void read_parameters(std::string file_path,std::vector<std::vector<std::string>> &parameters)
+void read_parameters(std::string file_path,std::vector<std::vector<std::string>> &parameters, std::vector<double>  &boundingBox)
 { 
     std::ifstream file(file_path); 
 
     if(file.is_open())
     { 
         std::string text; 
-    
+        std::getline(file,text);
+        std::string element;
+        std::stringstream p_line(text); 
+        for (int i = 0; i < 6; i++ )
+        {
+            std::getline(p_line, element, ' ');
+            boundingBox.push_back(std::stod(element));
+            //std::cout << element << '\n';
+        }
+ 
         while(std::getline(file,text))
         { 
             std::string element;
@@ -152,6 +161,8 @@ void get_pmatrix(std::vector<std::vector<std::string>> parameters, std::vector<c
     cv::Mat R(3,3, cv::DataType<double>::type);
     cv::Mat t(3,1, cv::DataType<double>::type);
     cv::Mat E(3,4, cv::DataType<double>::type); 
+    //parameters[];
+    
     for(int i = 0; i < parameters.size(); i++)
     { 
         int count = 1;
@@ -594,7 +605,7 @@ int main(int argc, char** argv)
 
     std::vector<cv::Mat> contours;
 
-    std::string path = HOME + "/adv_robotics_project/data/kiwi/";
+    std::string path = HOME + "/adv_robotics_project/testData/kiwi/";
     std::string series = "kiwi";
     int numberOfimages = 36; 
 
@@ -628,11 +639,12 @@ int main(int argc, char** argv)
 
     std::vector<cv::Mat> projections;
     std::vector<std::vector<std::string>> parameters;
-
+    
+    std::vector<double> boundingBox;
     auto start = std::chrono::high_resolution_clock::now();
 
     std::cout << "read params... " << '\n';
-    read_parameters(path + series + "_par.txt", parameters);
+    read_parameters(path + series + "_par.txt", parameters, boundingBox);
     std::cout << "get pmatrix... " << '\n';
     get_pmatrix(parameters, projections); 
     
@@ -655,13 +667,19 @@ int main(int argc, char** argv)
 
 
 
-    std::vector<double> voxel_size = {0.003, 0.003, 0.003};
 
-   
-    std::vector<double> xlim = {-0.12, 0.12};
-    std::vector<double> ylim = {-0.12, 0.12};
-    std::vector<double> zlim = {-0.04, 0.16};
     
+    
+    std::vector<double> xlim = {boundingBox[0], boundingBox[1]};
+    std::vector<double> ylim = {boundingBox[2], boundingBox[3]};
+    std::vector<double> zlim = {boundingBox[4], boundingBox[5]};
+    
+    double x_size = std::abs(boundingBox[0] - boundingBox[1]) / 100;
+    double y_size = std::abs(boundingBox[2] - boundingBox[3]) / 100;
+    double z_size = std::abs(boundingBox[4] - boundingBox[5]) / 100;
+
+    std::vector<double> voxel_size = {x_size, y_size, z_size};
+
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
 
     //pcl::PointCloud<pcl::PointXYZ>::Ptr vizualizer (new pcl::PointCloud<pcl::PointXYZ>);
