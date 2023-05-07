@@ -1,11 +1,11 @@
 import os
 import subprocess as sub
 
-runString = "./build/visualHull" 
-imagesAmountString = 36
-pathString = "./data/kiwi/"
-seriesString = "kiwi"
+run = "./build/visualHull" 
+imagesAmount = 36
+path = "./data/kiwi/"
+series = "kiwi"
 
-runString = runString + " " + str(imagesAmountString) + " " + pathString + " " + seriesString
+runString = run + " " + str(imagesAmount) + " " + path + " " + series
 print(runString)
 sub.run(runString, shell=True)
