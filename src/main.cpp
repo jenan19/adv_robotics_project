@@ -594,7 +594,7 @@ int main(int argc, char** argv)
 
     std::vector<cv::Mat> contours;
 
-    std::string path = HOME + "/adv_robotics_project/data/kiwi/";
+    std::string path = HOME + "/adv_robotics_project/testData/kiwi/";
     std::string series = "kiwi";
     int numberOfimages = 36; 
 
