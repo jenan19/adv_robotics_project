@@ -8,17 +8,29 @@
 #include <fstream>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
+#include <Eigen/Dense>
+#include <Eigen/StdVector>
 #include <pcl/common/common.h>
 #include <pcl/common/angles.h>
+#include <pcl/ModelCoefficients.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/io/ply_io.h>
 #include <pcl/point_types.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/surface/concave_hull.h>
+#include <pcl/filters/project_inliers.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/filters/voxel_grid.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/console/parse.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/surface/gp3.h>
+#include <pcl/PolygonMesh.h>
+#include <pcl/surface/convex_hull.h>
 #include <pcl/io/vtk_io.h>
 #include <pcl/surface/marching_cubes.h>
 #include <pcl/surface/marching_cubes_rbf.h>
@@ -27,7 +39,7 @@
 
 
 //#include <opencv2/core/ocl.hpp>
-#include <Eigen/Dense>
+
 
 
 
@@ -434,12 +446,13 @@ void fastTriangulation(pcl::PointCloud<pcl::PointXYZ> cloud_)
     pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;
     pcl::PolygonMesh triangles;
 
+
     // Set the maximum distance between connected points (maximum edge length)
-    gp3.setSearchRadius (0.025);
+    gp3.setSearchRadius (0.1);
 
     // Set typical values for the parameters
     gp3.setMu (2.5);
-    gp3.setMaximumNearestNeighbors (150);
+    gp3.setMaximumNearestNeighbors (500);
     gp3.setMaximumSurfaceAngle(M_PI/4); // 45 degrees
     gp3.setMinimumAngle(M_PI/18); // 10 degrees
     gp3.setMaximumAngle(2*M_PI/3); // 120 degrees
@@ -528,7 +541,7 @@ pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4
     double maxv = voxels[0][3];
 
     double iso_value = maxv - (int)((maxv / 100.0) * 5);
-    std::cerr << "MAX " << maxv << " iso " << iso_value << std::endl;
+    //std::cerr << "MAX " << maxv << " iso " << iso_value << std::endl;
     //int i = 0;
     for (int i = 0; i <voxels.size(); i++)
     {
@@ -553,7 +566,7 @@ pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4
     std::string pathFolder = HOME + "/adv_robotics_project/plyFiles/";
     std::string pathFile = name;
 
-    std::cout << "Saving to .ply" << std::endl;
+    //std::cout << "Saving to .ply" << std::endl;
     
 
 
@@ -570,7 +583,32 @@ pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4
 }
 
 
+pcl::PointCloud<pcl::PointXYZ> extractSurfacePoints(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
 
+    // Create a Concave Hull representation of the projected inliers
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull (new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled (new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::ConcaveHull<pcl::PointXYZ> chull;
+    pcl::VoxelGrid<pcl::PointXYZ> sor;
+    sor.setInputCloud (cloud);
+    sor.setLeafSize (0.0005f, 0.0005f, 0.0005f);
+    sor.filter (*downsampled);
+    std::cerr << "Downsampled has: " << downsampled->size ()
+            << " data points." << std::endl;
+
+    chull.setInputCloud (downsampled);
+    chull.setDimension(3);
+    chull.setAlpha(0.001);
+    chull.reconstruct (*cloud_hull);
+
+    std::cerr << "Convex hull has: " << cloud_hull->size ()
+            << " data points." << std::endl;
+
+      
+    return *cloud_hull;
+
+}
 
 
 
@@ -629,12 +667,6 @@ int main(int argc, char** argv)
     }
 
 
-    std::cout << "Amount of images: "<< numberOfimages << '\n'; 
-
-    std::cout << "Path to folder: " << path << '\n';
-
-    std::cout << "Name of series: " << series << '\n';
-
     std::string output = "bin_images";
 
     std::vector<cv::Mat> projections;
@@ -643,24 +675,21 @@ int main(int argc, char** argv)
     std::vector<double> boundingBox;
     auto start = std::chrono::high_resolution_clock::now();
 
-    //std::cout << "read params... " << '\n';
     read_parameters(path + series + "_par.txt", parameters, boundingBox);
-    //std::cout << "get pmatrix... " << '\n';
+
     get_pmatrix(parameters, projections); 
     
 
     
-    std::cout << "loading imgs... " << '\n';
+    
     loadImages(&path, &series, &images, numberOfimages);
-    //std::cout << "removing background... " << '\n'; 
-    //showImages(&images); 
+ 
     removeBackground(&images,0, 220);
-    //showImages(&images);
-    //applyMorphology(&images, cv::Size (5,5), cv::Size (13,13));
+
 
     writeImages(&images, &path, &output);
 
-    //showImages(&images);
+
 
     auto img_done_time = std::chrono::high_resolution_clock::now();
 
@@ -673,9 +702,6 @@ int main(int argc, char** argv)
     std::vector<double> ylim = {boundingBox[2], boundingBox[3]};
     std::vector<double> zlim = {boundingBox[4], boundingBox[5]};
 
-    // xlim = {-0.0090005951, 0.0090005951};
-    // ylim = {-0.0089972029 0.0089972029};
-    // zlim = {-0.04, 0.003};
 
 
     
@@ -691,14 +717,12 @@ int main(int argc, char** argv)
     double y_size = std::abs(ylim[0] - ylim[1]) / (100 * percentY * 4);
     double z_size = std::abs(zlim[0] - zlim[1]) / (100 * percentZ * 4);
 
-    //std::cout << x_size << " " << y_size << " " << z_size << '\n'; 
     
     std::vector<double> voxel_size = {x_size, y_size, z_size};
 
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
 
-    //pcl::PointCloud<pcl::PointXYZ>::Ptr vizualizer (new pcl::PointCloud<pcl::PointXYZ>);
-    std::cout << "running.. " << '\n';
+    
     pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::PointCloud<pcl::PointXYZ> cloud;
     for (int i = 0; i < numberOfimages; i++)
@@ -707,42 +731,29 @@ int main(int argc, char** argv)
         updateVoxel(images[i],projections[i],voxels);
 
 
-        std::cout << "Updated voxel for " << i + 1 << "/" << numberOfimages << '\n' ;
-        //vizualizer.reset( new pcl::PointCloud<pcl::PointXYZ>(cloud));
-
-        //viewer = simpleVis(vizualizer);
-
-        //viewer->spinOnce(1);
+        std::cout << "Updated voxel for " << i + 1 << "/" << numberOfimages << '\r' << std::flush;
+ 
 
     }
 
     cloud = updatePointCloud(voxels,series);
-    //fastTriangulation(cloud);
-    //voxels = projectImagesOnvoxels(voxels, parameters, &images);
+    
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPtr(new pcl::PointCloud<pcl::PointXYZ>(cloud));
+    pcl::PCDWriter writer;  
+    writer.write( HOME + "/adv_robotics_project/pcd/" + series + ".pcd", extractSurfacePoints(cloudPtr), false);
+    
+
 
     auto voxel_done_time = std::chrono::high_resolution_clock::now();
 
     auto img_duration = std::chrono::duration_cast<std::chrono::microseconds>(img_done_time - start);
     auto voxel_duration = std::chrono::duration_cast<std::chrono::microseconds>( voxel_done_time - img_done_time );
 
-    std::cout << "Time taken by loading images  : " << img_duration.count() /1000000.0 << " seconds" << std::endl;
-    std::cout << "Time taken by voxel generation: " << voxel_duration.count() /1000000.0 << " seconds" << std::endl;
+    // std::cout << "Time taken by loading images  : " << img_duration.count() /1000000.0 << " seconds" << std::endl;
+    // std::cout << "Time taken by voxel generation: " << voxel_duration.count() /1000000.0 << " seconds" << std::endl;
     
-    std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
+    // std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
     //voxelListToFile(voxels);
-
-/*
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPTR(new pcl::PointCloud<pcl::PointXYZ>::Ptr );
-    *cloudPTR = updatePointCloud(voxels);
-    viewer = simpleVis(cloudPTR);
-    while (!viewer->wasStopped ())
-    {
-        viewer->spinOnce (100);
-
-    }
-    
-*/
-    //cv::waitKey(1);
 
     return 1;
 }
