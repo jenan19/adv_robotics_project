@@ -754,6 +754,6 @@ int main(int argc, char** argv)
     
     // std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
     //voxelListToFile(voxels);
-    std::cout << "skal lige prøve" << std::endl;
+  
     return 1;
 }
