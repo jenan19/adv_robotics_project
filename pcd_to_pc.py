@@ -62,9 +62,16 @@ def color_pcd_hull(pcd_hull, pcd_cad, file_):
         f.write("point, dist\n")
         
         for i , point in enumerate(points):
-            f.write("%s,%s/n" % (str(point),str(dist[i])))
+            f.write("%s,%s \n" % (str(point),str(dist[i])))
             # band pass color value [0, 1] because open3D is dumb :)))))
             pcd_hull.colors[i] = [max(min(x, 1), 0) for x in pcd_cad.colors[point]]
+            
+            # DOES NOT WORK AS INTENDED
+            if pcd_cad.colors[point][0] > 0.5:
+                if dist[i]**2 > 1:
+                    pcd_hull.colors[i][1]  = 1
+
+                
 
     return pcd_hull
 
