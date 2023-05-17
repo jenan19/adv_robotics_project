@@ -34,7 +34,12 @@
 #include <pcl/io/vtk_io.h>
 #include <pcl/surface/marching_cubes.h>
 #include <pcl/surface/marching_cubes_rbf.h>
+
+#include <pcl/filters/extract_indices.h>
+
+#include <pcl/kdtree/kdtree_flann.h>
 #include <stdlib.h>
+
 //#include <open3d/Open3D.h>      //Den her laver noget mærkeligt 
 
 
@@ -611,6 +616,44 @@ pcl::PointCloud<pcl::PointXYZ> extractSurfacePoints(pcl::PointCloud<pcl::PointXY
 }
 
 
+void removeCenterOfVoxels(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, std::vector<double> voxel_size)
+{
+
+    float radius = voxel_size[0] + (voxel_size[0] * 0.05);
+    
+
+
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud (cloud);
+
+
+    std::vector<int> pointIdxRadiusSearch;
+    std::vector<float> pointRadiusSquaredDistance;
+
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+    pcl::PointXYZ searchPoint;
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    for (int j = 0; j < cloud->points.size(); j++)
+    {
+        searchPoint = cloud->points[j];
+        if ( kdtree.radiusSearch (searchPoint, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 1)
+        {
+            if (pointIdxRadiusSearch.size () > 6 ) 
+            {
+                inliers->indices.push_back(j);
+            }
+        }
+    }
+    
+    std::cout << "New point cloud size is : " <<  cloud->points.size() - inliers->indices.size() << std::endl;
+
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(true);
+    extract.filter(*cloud);
+
+}
+
 
 pcl::visualization::PCLVisualizer::Ptr simpleVis (pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud)
 {
@@ -736,11 +779,16 @@ int main(int argc, char** argv)
 
     }
 
+    
     cloud = updatePointCloud(voxels,series);
     
+
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPtr(new pcl::PointCloud<pcl::PointXYZ>(cloud));
+
+    removeCenterOfVoxels(cloudPtr, voxel_size);
+
     pcl::PCDWriter writer;  
-    writer.write( HOME + "/adv_robotics_project/pcd/" + series + ".pcd", extractSurfacePoints(cloudPtr), false);
+    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + ".pcd", *cloudPtr, false);
     
 
 
