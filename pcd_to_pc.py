@@ -51,6 +51,21 @@ def convert_mesh_to_pcd(file_, number_of_points):
     #pcd = mesh.sample_points_uniformly(number_of_points=number_of_points)
     return pcd
 
+def MADThresholding(obs, thresh = 3):
+    if len(obs.shape) == 1:
+        obs = obs[:,None]
+    median = np.median(obs, axis=0)
+    diff = np.sum((obs - median)**2, axis=-1)
+    diff = np.sqrt(diff)
+    med_abs_deviation = np.median(diff)
+
+    modified_z_score = 0.6745 * diff / med_abs_deviation
+
+    return modified_z_score > thresh
+
+
+
+
 def color_pcd_hull(pcd_hull, pcd_cad, file_):
     
     xyz_hull =np.asarray(pcd_hull.points)
@@ -61,7 +76,12 @@ def color_pcd_hull(pcd_hull, pcd_cad, file_):
 
     mu = np.mean(dist)
     median = np.median(dist)
-    sigma = np.std(dist)
+    #sigma = 2*np.std(dist)
+    
+    
+    mask = MADThresholding(dist)
+    #print(mask)
+    
 
     with open(PATH_TO_CSV + file_.split(".")[0]+ ".csv", "w") as f:
         f.write("point, dist\n")
@@ -73,7 +93,7 @@ def color_pcd_hull(pcd_hull, pcd_cad, file_):
             if pcd_cad.colors[point][0] > 0.5:
                 pcd_hull.colors[i][0]= 1
 
-            if mu + sigma < dist[i]:
+            if mask[i]:
                 pcd_hull.colors[i][1]  = 1
 
         f.write("%f \n" % mu)
