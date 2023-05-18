@@ -6,6 +6,8 @@
 #include <string>
 #include <chrono>
 #include <fstream>
+#include <algorithm>
+#include <random>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <Eigen/Dense>
@@ -34,6 +36,7 @@
 #include <pcl/io/vtk_io.h>
 #include <pcl/surface/marching_cubes.h>
 #include <pcl/surface/marching_cubes_rbf.h>
+#include <pcl/filters/uniform_sampling.h>
 
 #include <pcl/filters/extract_indices.h>
 
@@ -619,7 +622,7 @@ pcl::PointCloud<pcl::PointXYZ> extractSurfacePoints(pcl::PointCloud<pcl::PointXY
 void removeCenterOfVoxels(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, std::vector<double> voxel_size)
 {
 
-    float radius = voxel_size[0] + (voxel_size[0] * 0.05);
+    float radius = voxel_size[0] + (voxel_size[0] * 0.1);
     
 
 
@@ -653,6 +656,58 @@ void removeCenterOfVoxels(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, std::vecto
     extract.filter(*cloud);
 
 }
+
+
+void downSample(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, 
+                pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_downsampled,
+                int pointCloudSize)
+{
+    std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>> points = cloud->points;
+
+    auto rd = std::random_device {}; 
+    auto rng = std::default_random_engine { rd() };
+    std::shuffle(points.begin(), points.end(), rng);
+    
+    //std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>>::const_iterator first = points.begin();
+    //std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>>::const_iterator last = points.begin() + pointCloudSize;
+    
+    std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>> downSampled(points.begin(), points.begin() + pointCloudSize);
+
+    for(auto i : downSampled)
+    {
+        cloud_downsampled->push_back(i);
+    }
+}
+
+
+
+
+void normalEstimationMultiVeiw(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, 
+                                pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_downsampled,
+                                pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_downsampled)
+{
+
+    // Create the normal estimation class, and pass the input dataset to it
+    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
+    ne.setInputCloud (cloud_downsampled);
+    // Pass the original data (before downsampling) as the search surface
+    ne.setSearchSurface (cloud);
+    // Create an empty kdtree representation, and pass it to the normal estimation object.
+    // Its content will be filled inside the object, based on the given surface dataset.
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ> ());
+    ne.setSearchMethod (tree);
+    // Output datasets
+    pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
+    // Use all neighbors in a sphere of radius 3cm
+    ne.setRadiusSearch (0.03);
+    // Compute the features
+    ne.compute (*cloud_normals);
+
+    pcl::concatenateFields(*cloud_downsampled, *cloud_normals, *cloud_normals_downsampled);
+}
+
+
+
 
 
 pcl::visualization::PCLVisualizer::Ptr simpleVis (pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloud)
@@ -756,9 +811,9 @@ int main(int argc, char** argv)
 
 
 
-    double x_size = std::abs(xlim[0] - xlim[1]) / (100 * percentX * 4);
-    double y_size = std::abs(ylim[0] - ylim[1]) / (100 * percentY * 4);
-    double z_size = std::abs(zlim[0] - zlim[1]) / (100 * percentZ * 4);
+    double x_size = std::abs(xlim[0] - xlim[1]) / (100 * percentX * 3);
+    double y_size = std::abs(ylim[0] - ylim[1]) / (100 * percentY * 3);
+    double z_size = std::abs(zlim[0] - zlim[1]) / (100 * percentZ * 3);
 
     
     std::vector<double> voxel_size = {x_size, y_size, z_size};
@@ -784,12 +839,24 @@ int main(int argc, char** argv)
     
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPtr(new pcl::PointCloud<pcl::PointXYZ>(cloud));
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudDownsampledPtr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointNormal>::Ptr cloudNormalPtr(new pcl::PointCloud<pcl::PointNormal>());
 
     removeCenterOfVoxels(cloudPtr, voxel_size);
 
+
+    downSample(cloudPtr, cloudDownsampledPtr, 2048);
+
+
+    normalEstimationMultiVeiw(cloudPtr, cloudDownsampledPtr, cloudNormalPtr);
+
+
+
+
     pcl::PCDWriter writer;  
     writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + ".pcd", *cloudPtr, false);
-    
+    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
+    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_normals.pcd", *cloudNormalPtr, false);
 
 
     auto voxel_done_time = std::chrono::high_resolution_clock::now();
