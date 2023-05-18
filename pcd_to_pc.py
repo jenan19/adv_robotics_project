@@ -47,11 +47,11 @@ def convert_mesh_to_pcd(file_, number_of_points):
     mesh = o3d.io.read_triangle_mesh(PATH_CADFILE + file_)
     
     
-    pcd = mesh.sample_points_poisson_disk(number_of_points, init_factor=5, pcl=None)
-    #pcd = mesh.sample_points_uniformly(number_of_points=number_of_points)
+    #pcd = mesh.sample_points_poisson_disk(number_of_points, init_factor=5, pcl=None)
+    pcd = mesh.sample_points_uniformly(number_of_points=number_of_points)
     return pcd
 
-def MADThresholding(obs, thresh = 3):
+def MADThresholding(obs, thresh = 2):
     if len(obs.shape) == 1:
         obs = obs[:,None]
     median = np.median(obs, axis=0)
@@ -93,7 +93,8 @@ def color_pcd_hull(pcd_hull, pcd_cad, file_):
             if pcd_cad.colors[point][0] > 0.5:
                 pcd_hull.colors[i][0]= 1
 
-            if mask[i]:
+            if mask[i] and dist[i] > 0.4:
+                #print(dist[i])
                 pcd_hull.colors[i][1]  = 1
 
         f.write("%f \n" % mu)
@@ -112,7 +113,7 @@ def main():
     for file_ in tqdm(os.listdir(PATH_CADFILE)):
         if len(file_.split('.')) == 2:
             pcd_hull = load_point_cloud(file_)
-            pcd_cad = convert_mesh_to_pcd(file_,10000)
+            pcd_cad = convert_mesh_to_pcd(file_,100000)
             #o3d.visualization.draw_geometries([pcd_cad])
             pcd_hull = color_pcd_hull(pcd_hull, pcd_cad, file_)
             o3d.io.write_point_cloud(PATH_TO_HULL_COLORED +"/"+ file_, pcd_hull)
