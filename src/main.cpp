@@ -8,6 +8,10 @@
 #include <fstream>
 #include <algorithm>
 #include <random>
+#include <thread>
+#include <mutex>
+#include <filesystem>
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <Eigen/Dense>
@@ -57,10 +61,17 @@
 
 void loadImages(std::string *path, std::string *seriesName,std::vector<cv::Mat> *images, int numberOfImages)
 {
+    
     for (int i = 0; i < numberOfImages; i++)
     {
+        cv::Mat img;
+        while(img.empty())
+        {
+            img = cv::imread(*path + *seriesName + "_" + std::to_string(i + 1) + ".png",cv::IMREAD_GRAYSCALE);
+        }
         // pushback images
-        images->push_back(cv::Mat(cv::imread(*path + *seriesName + "_" + std::to_string(i + 1) + ".png",cv::IMREAD_GRAYSCALE)));
+        images->push_back(img);
+
     }
     
 }
@@ -583,9 +594,9 @@ pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4
     //fastTriangulation(cloud);
 
 
-    pcl::io::savePLYFileBinary(pathFolder + pathFile + ".ply", cloud);
+    //pcl::io::savePLYFileBinary(pathFolder + pathFile + ".ply", cloud);
     //pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
-    std::cerr << "Saved " << cloud.size () << " data points to " << pathFolder + pathFile << ".ply" << std::endl;
+    //std::cerr << "Saved " << cloud.size () << " data points to " << pathFolder + pathFile << ".ply" << std::endl;
     
     return cloud;
 }
@@ -648,7 +659,7 @@ void removeCenterOfVoxels(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, std::vecto
         }
     }
     
-    std::cout << "New point cloud size is : " <<  cloud->points.size() - inliers->indices.size() << std::endl;
+    //std::cout << "New point cloud size is : " <<  cloud->points.size() - inliers->indices.size() << std::endl;
 
     extract.setInputCloud(cloud);
     extract.setIndices(inliers);
@@ -698,8 +709,8 @@ void normalEstimationMultiVeiw(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
     ne.setSearchMethod (tree);
     // Output datasets
     pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
-    // Use all neighbors in a sphere of radius 3cm
-    ne.setRadiusSearch (0.03);
+    // Use 6 closest neighbors 
+    ne.setKSearch(6);
     // Compute the features
     ne.compute (*cloud_normals);
 
@@ -726,44 +737,16 @@ pcl::visualization::PCLVisualizer::Ptr simpleVis (pcl::PointCloud<pcl::PointXYZ>
 
 
 
-
-
-
-
-
-int main(int argc, char** argv) 
+void make_VH_and_PCD(std::string path, std::string series, int numberOfimages)
 {
-
-
     const char* home = getenv("HOME");
     std::string HOME = home;
+
+    path = HOME + path;
+
     std::vector<cv::Mat> images;
 
     std::vector<cv::Mat> contours;
-
-    std::string path = HOME + "/adv_robotics_project/testData/kiwi/";
-    std::string series = "kiwi";
-    int numberOfimages = 36; 
-
-
-    if (argc > 1)
-        try
-        {
-            numberOfimages = std::stoi(argv[1]) ;
-        }
-        catch(const std::exception& e)
-        {
-            std::cerr << "ERROR!: Not a number, using 36 images" << '\n';
-        }
-        
-        
-    if (argc > 3)
-    {
-
-        path = argv[2];
-        series = argv[3];
-    }
-
 
     std::string output = "bin_images";
 
@@ -829,7 +812,7 @@ int main(int argc, char** argv)
         updateVoxel(images[i],projections[i],voxels);
 
 
-        std::cout << "Updated voxel for " << i + 1 << "/" << numberOfimages << '\r' << std::flush;
+        //std::cout << "Updated voxel for " << i + 1 << "/" << numberOfimages << '\r' << std::flush;
  
 
     }
@@ -845,7 +828,7 @@ int main(int argc, char** argv)
     removeCenterOfVoxels(cloudPtr, voxel_size);
 
 
-    downSample(cloudPtr, cloudDownsampledPtr, 2048);
+    downSample(cloudPtr, cloudDownsampledPtr, 4096);
 
 
     normalEstimationMultiVeiw(cloudPtr, cloudDownsampledPtr, cloudNormalPtr);
@@ -854,9 +837,22 @@ int main(int argc, char** argv)
 
 
     pcl::PCDWriter writer;  
-    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + ".pcd", *cloudPtr, false);
-    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
-    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_normals.pcd", *cloudNormalPtr, false);
+    if (series != "kiwi")
+    {
+        writer.write( HOME + "/adv_robotics_project/pcd/" + series + ".pcd", *cloudPtr, false);
+        writer.write( HOME + "/adv_robotics_project/pcd_downsampled/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
+        writer.write( HOME + "/adv_robotics_project/pcd_w_normals/" + series + "_normals.pcd", *cloudNormalPtr, false);
+        // writer.write( HOME + "/adv_robotics_project/Test1/" + series + ".pcd", *cloudPtr, false);
+        // writer.write( HOME + "/adv_robotics_project/Test1/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
+        // writer.write( HOME + "/adv_robotics_project/Test1/" + series + "_normals.pcd", *cloudNormalPtr, false);
+    }
+    else
+    {
+        writer.write( HOME + "/adv_robotics_project/Test1/" + series + ".pcd", *cloudPtr, false);
+        writer.write( HOME + "/adv_robotics_project/Test1/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
+        writer.write( HOME + "/adv_robotics_project/Test1/" + series + "_normals.pcd", *cloudNormalPtr, false);
+    }
+
 
 
     auto voxel_done_time = std::chrono::high_resolution_clock::now();
@@ -869,6 +865,105 @@ int main(int argc, char** argv)
     
     // std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
     //voxelListToFile(voxels);
-  
+
+}
+
+
+
+
+int main(int argc, char** argv) 
+{
+
+
+
+    std::string path = "/adv_robotics_project/testData/kiwi/";
+    std::string series = "kiwi";
+    int numberOfimages = 36; 
+
+
+    if (argc > 1)
+        try
+        {
+            numberOfimages = std::stoi(argv[1]) ;
+        }
+        catch(const std::exception& e)
+        {
+            std::cerr << "ERROR!: Not a number, using 36 images" << '\n';
+        }
+        
+        
+    if (argc > 3)
+    {
+
+        path = argv[2];
+        series = argv[3];
+    }
+
+    const char* home = getenv("HOME");
+    std::string HOME = home;
+
+    std::vector<std::string> seriesList;
+
+    std::string path_to_directory = HOME + "/adv_robotics_project/data/";
+    for (const auto & entry : std::filesystem::directory_iterator(path_to_directory))
+    {
+        std::string s = entry.path();
+        std::string delimiter = "/";
+
+        size_t pos = 0;
+        std::string token;
+        while ((pos = s.find(delimiter)) != std::string::npos) {
+            token = s.substr(0, pos);
+            s.erase(0, pos + delimiter.length());
+        }
+        seriesList.push_back(s);
+    }
+
+    //std::cout << seriesList.size() << std::endl;
+
+    
+    const auto processor_count = std::thread::hardware_concurrency();
+
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < seriesList.size(); i++ )
+    {
+        std::thread th;
+        threads.push_back(std::move(th));
+    }
+    auto start = std::chrono::high_resolution_clock::now();
+    auto now = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(now - start);
+    int i = 0;
+    std::vector<int> endThreadsIndex;
+    while(i < seriesList.size())
+    {
+        now = std::chrono::high_resolution_clock::now();
+        duration = std::chrono::duration_cast<std::chrono::microseconds>(now - start);
+        std::cout << "Created pointcloud for  " << i << "/" << seriesList.size() << " Seconds since start: "  <<  duration.count() /1000000.0 << '\r' << std::flush;
+        if (threads.size() - i > processor_count)
+        {
+            for (int k = 0; k < processor_count; k++)
+            {
+                threads[i+k] = std::thread(make_VH_and_PCD,"/adv_robotics_project/data/" + seriesList[i+k] + "/", seriesList[i+k], 36);
+            }
+            for (int k = 0; k < processor_count; k++)
+            {
+                threads[i+k].join();
+            }
+            i += processor_count;
+        }
+        else
+        {
+            threads[i] = std::thread(make_VH_and_PCD,"/adv_robotics_project/data/" + seriesList[i] + "/", seriesList[i], 36);
+            endThreadsIndex.push_back(i);
+            i++;
+        }
+    }
+    for (int k = 0; k < endThreadsIndex.size(); k++)
+    {
+        threads[endThreadsIndex[k]].join();
+    }
+
     return 1;
 }

@@ -5,3 +5,17 @@ hull_colored/*
 plyFiles/*
 out/*
 pcd_no_concave/*
+pcd/*
+pcd_old
+pcd_dowmsampled/*
+pcd_dowmsampled_old
+downsampled_4096
+hull_colored_ds/*
+normals_4096
+pcd_w_normals/*
+pcd_w_normals_old
+Test1/*
+pcd_dowmsampled_4096.zip
+pcd_dowmsampled.zip
+pcd_w_normals_4096.zip
+pcd_w_normals.zip
