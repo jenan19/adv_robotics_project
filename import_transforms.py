@@ -3,7 +3,7 @@ import copy
 import numpy as np
 import os
 
-path = "/home/tk/Downloads/transforms.txt"
+path = "/home/jc/adv_robotics_project/data/socket_dark/socket_dark_par.txt"
 
 output_name  = "par.txt"
 
@@ -28,6 +28,7 @@ with open(path, newline="\n") as file :
                 par_array.append(i)
             out.append(par_array)
         except:
+            print("failed to read file...")
             break
 
 with open(output_name, 'w') as f:

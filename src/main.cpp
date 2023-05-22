@@ -92,9 +92,16 @@ void applyMorphology(std::vector<cv::Mat> *images, cv::Size maskSize_open,  cv::
 
 void removeBackground(std::vector<cv::Mat> *images, double threshold, double maxval)
 {
+    cv::Mat circle (cv::Size(images->at(0).cols, images->at(0).rows), CV_8UC1);
+
+    cv::circle(circle, cv::Point(circle.cols / 2, circle.rows / 2),2000,255,-1);
+
+
+
     for (int i = 0; i < images->size(); i++)
     {
         cv::inRange(images->at(i),cv::Scalar(threshold, threshold, threshold), cv::Scalar(maxval, maxval, maxval),images->at(i));
+        cv::bitwise_and(images->at(i),circle,images->at(i));
     } 
 }
 
@@ -583,9 +590,9 @@ pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4
     //fastTriangulation(cloud);
 
 
-    pcl::io::savePLYFileBinary(pathFolder + pathFile + ".ply", cloud);
-    //pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
-    std::cerr << "Saved " << cloud.size () << " data points to " << pathFolder + pathFile << ".ply" << std::endl;
+    // pcl::io::savePLYFileBinary(pathFolder + pathFile + ".ply", cloud);
+    // //pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
+    // std::cerr << "Saved " << cloud.size () << " data points to " << pathFolder + pathFile << ".ply" << std::endl;
     
     return cloud;
 }
@@ -648,7 +655,7 @@ void removeCenterOfVoxels(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, std::vecto
         }
     }
     
-    std::cout << "New point cloud size is : " <<  cloud->points.size() - inliers->indices.size() << std::endl;
+    //std::cout << "New point cloud size is : " <<  cloud->points.size() - inliers->indices.size() << std::endl;
 
     extract.setInputCloud(cloud);
     extract.setIndices(inliers);
@@ -741,9 +748,9 @@ int main(int argc, char** argv)
 
     std::vector<cv::Mat> contours;
 
-    std::string path = HOME + "/adv_robotics_project/testData/kiwi/";
-    std::string series = "kiwi";
-    int numberOfimages = 36; 
+    std::string path = HOME + "/adv_robotics_project/data/socket_dark/";
+    std::string series = "socket_dark";
+    int numberOfimages = 135; 
 
 
     if (argc > 1)
@@ -782,7 +789,7 @@ int main(int argc, char** argv)
     
     loadImages(&path, &series, &images, numberOfimages);
  
-    removeBackground(&images,0, 220);
+    removeBackground(&images,0, 200);
 
 
     writeImages(&images, &path, &output);
@@ -811,17 +818,15 @@ int main(int argc, char** argv)
 
 
 
-    double x_size = std::abs(xlim[0] - xlim[1]) / (100 * percentX * 3);
-    double y_size = std::abs(ylim[0] - ylim[1]) / (100 * percentY * 3);
-    double z_size = std::abs(zlim[0] - zlim[1]) / (100 * percentZ * 3);
+    double x_size = std::abs(xlim[0] - xlim[1]) / (100 * percentX * 4);
+    double y_size = std::abs(ylim[0] - ylim[1]) / (100 * percentY * 4);
+    double z_size = std::abs(zlim[0] - zlim[1]) / (100 * percentZ * 4);
 
     
     std::vector<double> voxel_size = {x_size, y_size, z_size};
 
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
 
-    
-    pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::PointCloud<pcl::PointXYZ> cloud;
     for (int i = 0; i < numberOfimages; i++)
     {
@@ -838,28 +843,28 @@ int main(int argc, char** argv)
     cloud = updatePointCloud(voxels,series);
     
 
+
+    auto voxel_done_time = std::chrono::high_resolution_clock::now();
+
+
+    pcl::PCDWriter writer;  
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPtr(new pcl::PointCloud<pcl::PointXYZ>(cloud));
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloudDownsampledPtr(new pcl::PointCloud<pcl::PointXYZ>());
     pcl::PointCloud<pcl::PointNormal>::Ptr cloudNormalPtr(new pcl::PointCloud<pcl::PointNormal>());
 
     removeCenterOfVoxels(cloudPtr, voxel_size);
 
-
-    downSample(cloudPtr, cloudDownsampledPtr, 2048);
+    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_surface.pcd", *cloudPtr, false);
+    downSample(cloudPtr, cloudDownsampledPtr, 4096);
 
 
     normalEstimationMultiVeiw(cloudPtr, cloudDownsampledPtr, cloudNormalPtr);
 
 
+    // writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + ".pcd", *cloudPtr, false);
+    // writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
+    // writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_normals.pcd", *cloudNormalPtr, false);
 
-
-    pcl::PCDWriter writer;  
-    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + ".pcd", *cloudPtr, false);
-    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
-    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_normals.pcd", *cloudNormalPtr, false);
-
-
-    auto voxel_done_time = std::chrono::high_resolution_clock::now();
 
     auto img_duration = std::chrono::duration_cast<std::chrono::microseconds>(img_done_time - start);
     auto voxel_duration = std::chrono::duration_cast<std::chrono::microseconds>( voxel_done_time - img_done_time );
@@ -867,8 +872,23 @@ int main(int argc, char** argv)
     // std::cout << "Time taken by loading images  : " << img_duration.count() /1000000.0 << " seconds" << std::endl;
     // std::cout << "Time taken by voxel generation: " << voxel_duration.count() /1000000.0 << " seconds" << std::endl;
     
-    // std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
+    // std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / numberOfimages << " seconds" << std::endl;
     //voxelListToFile(voxels);
+
+    std::ofstream testRes;
+
+    // testRes.open("/home/jc/adv_robotics_project/testResult.csv", std::ios::app);
+    // testRes << cloud.size() << ",";
+    // testRes << voxels.size() << ",";
+    // testRes << voxel_duration.count() /1000000.0 << ",";
+    // testRes << voxel_duration.count() /1000000.0 / numberOfimages << "\n";
+
+    std::cout << cloud.size() << ",";
+    std::cout << cloudPtr->size() << ",";
+    std::cout << cloudDownsampledPtr->size() << "\n";
+    //std::cout << voxel_duration.count() /1000000.0 / numberOfimages << "\n";
+    //testRes.close();
+    
   
     return 1;
 }
