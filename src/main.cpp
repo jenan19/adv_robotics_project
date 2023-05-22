@@ -68,6 +68,7 @@ void loadImages(std::string *path, std::string *seriesName,std::vector<cv::Mat> 
         while(img.empty())
         {
             img = cv::imread(*path + *seriesName + "_" + std::to_string(i + 1) + ".png",cv::IMREAD_GRAYSCALE);
+            //std::cout << *path + *seriesName + "_" + std::to_string(i + 1) + ".png" << std::endl;
         }
         // pushback images
         images->push_back(img);
@@ -186,6 +187,33 @@ void read_parameters(std::string file_path,std::vector<std::vector<std::string>>
     file.close(); 
 }
 
+
+void read_parameters_for_dino(std::string file_path,std::vector<std::vector<std::string>> &parameters)
+{ 
+    std::ifstream file(file_path); 
+
+    if(file.is_open())
+    { 
+        std::string text; 
+        std::getline(file,text);
+        std::string element;
+        std::stringstream p_line(text); 
+        while(std::getline(file,text))
+        { 
+            std::string element;
+            std::stringstream p_line(text); 
+            parameters.push_back({});
+            while(std::getline(p_line, element, ' '))
+            {
+                parameters[parameters.size()-1].push_back(element);
+                //std::cout << element;
+            }
+        }
+    } 
+    file.close(); 
+}
+
+
 void get_pmatrix(std::vector<std::vector<std::string>> parameters, std::vector<cv::Mat> &projections)
 { 
     cv::Mat K(3,3, cv::DataType<double>::type);
@@ -232,6 +260,53 @@ void get_pmatrix(std::vector<std::vector<std::string>> parameters, std::vector<c
         R = R * z90deg;
 
         cv::hconcat(R.t(),(-R.t()*t),E);
+
+        projections.push_back(K*E); 
+    }
+}
+
+void get_pmatrix_for_dino(std::vector<std::vector<std::string>> parameters, std::vector<cv::Mat> &projections)
+{ 
+    cv::Mat K(3,3, cv::DataType<double>::type);
+    cv::Mat R(3,3, cv::DataType<double>::type);
+    cv::Mat t(3,1, cv::DataType<double>::type);
+    cv::Mat E(3,4, cv::DataType<double>::type); 
+    //parameters[];
+    
+    for(int i = 0; i < parameters.size(); i++)
+    { 
+        int count = 1;
+        
+        for(int row = 0; row < 3; row++)
+        { 
+            for(int col = 0; col < 3; col++)
+            {
+                //std::cout << parameters[i][count] << " ";
+                K.at<double>(row,col) = std::stod(parameters[i][count]);
+                count++; 
+            }
+        } 
+        //std::cout << "\n";
+        for(int row = 0; row < 3; row++) 
+        { 
+            for(int col = 0; col < 3; col++)
+            {
+                R.at<double>(row,col) = std::stod(parameters[i][count]);
+                //std::cout << parameters[i][count] << " ";
+                count++; 
+            }
+        }
+        //std::cout << "\n";
+        for(int row = 0; row < 3; row++) 
+        { 
+            t.at<double>(row,0) = std::stod(parameters[i][count]);
+            //std::cout << parameters[i][count] << " ";
+            count++; 
+        }
+        //std::cout << "\n";
+        
+
+        cv::hconcat(R,t,E);
 
         projections.push_back(K*E); 
     }
@@ -385,11 +460,11 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
         cv::Vec4d* it = object_points_3D.ptr<cv::Vec4d>(i);
         
         *it = {voxels[i][0], voxels[i][1], voxels[i][2], 1};
-        //std::cout << *it << '\n';
+        
     }
 
 
-
+    
 
     cv::Mat projected2Dpoints, dummy;
 
@@ -398,7 +473,7 @@ void updateVoxel(cv::Mat image, cv::Mat projection, std::vector<std::array<doubl
     // Note: its faster to save the transpose and then pass it to GEMM than just pasing the transposed points idfk...
     object_points_3D = object_points_3D.t();
     cv::gemm(projection, object_points_3D, 1.0, dummy, 0, projected2Dpoints);
-
+    
     cv::Mat img = image.clone();
     
     //NORMALIZE POINTS
@@ -837,6 +912,8 @@ void make_VH_and_PCD(std::string path, std::string series, int numberOfimages)
 
 
     pcl::PCDWriter writer;  
+
+
     if (series != "kiwi")
     {
         writer.write( HOME + "/adv_robotics_project/pcd/" + series + ".pcd", *cloudPtr, false);
@@ -855,6 +932,7 @@ void make_VH_and_PCD(std::string path, std::string series, int numberOfimages)
 
 
 
+
     auto voxel_done_time = std::chrono::high_resolution_clock::now();
 
     auto img_duration = std::chrono::duration_cast<std::chrono::microseconds>(img_done_time - start);
@@ -870,36 +948,128 @@ void make_VH_and_PCD(std::string path, std::string series, int numberOfimages)
 
 
 
-
-int main(int argc, char** argv) 
+void make_VH_and_PCD_of_dino(std::string path, std::string series, int numberOfimages)
 {
+    //std::cout << "1 " << std::endl;
+    const char* home = getenv("HOME");
+    std::string HOME = home;
+
+    path = HOME + path;
+
+    std::vector<cv::Mat> images;
+
+    std::vector<cv::Mat> contours;
+
+    std::string output = "bin_images";
+
+    std::vector<cv::Mat> projections;
+    std::vector<std::vector<std::string>> parameters;
+    
+    std::vector<double> boundingBox;
+    
+
+    read_parameters_for_dino(path + series + "_par.txt", parameters);
+
+    //std::cout << parameters.size() << std::endl;
+
+    get_pmatrix_for_dino(parameters, projections); 
+    
+    //std::cout << "2 " << std::endl;
+    
+    
+    loadImages(&path, &series, &images, numberOfimages);
+
+ 
+    removeBackground(&images,0, 50);
+
+
+    writeImages(&images, &path, &output);
 
 
 
-    std::string path = "/adv_robotics_project/testData/kiwi/";
-    std::string series = "kiwi";
-    int numberOfimages = 36; 
+
+    auto img_done_time = std::chrono::high_resolution_clock::now();
 
 
-    if (argc > 1)
-        try
-        {
-            numberOfimages = std::stoi(argv[1]) ;
-        }
-        catch(const std::exception& e)
-        {
-            std::cerr << "ERROR!: Not a number, using 36 images" << '\n';
-        }
-        
-        
-    if (argc > 3)
+    //std::cout << "3 " << std::endl;
+
+    
+    
+    std::vector<double> xlim = {-0.07, 0.02};
+    std::vector<double> ylim = {-0.02, 0.07};
+    std::vector<double> zlim = {-0.07, 0.02};
+
+
+   
+    std::vector<double> voxel_size = {0.00074, 0.00074, 0.00074};
+
+    std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
+
+    
+    pcl::visualization::PCLVisualizer::Ptr viewer;
+
+    pcl::PointCloud<pcl::PointXYZ> cloud;
+
+    std::cout << voxels.size() << std::endl;
+
+   auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < numberOfimages; i++)
     {
+        
+        updateVoxel(images[i],projections[i],voxels);
 
-        path = argv[2];
-        series = argv[3];
+
+        //std::cout << "Updated voxel for " << i + 1 << "/" << numberOfimages << '\r' << std::flush;
+ 
+
     }
 
-    const char* home = getenv("HOME");
+    auto now = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(now - start);
+    std::cout << " Seconds since start: "  <<  duration.count() /1000000.0 << std::endl;
+
+    cloud = updatePointCloud(voxels,series);
+    
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPtr(new pcl::PointCloud<pcl::PointXYZ>(cloud));
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudDownsampledPtr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointNormal>::Ptr cloudNormalPtr(new pcl::PointCloud<pcl::PointNormal>());
+
+    //removeCenterOfVoxels(cloudPtr, voxel_size);
+
+
+    //downSample(cloudPtr, cloudDownsampledPtr, 4096);
+
+
+    //normalEstimationMultiVeiw(cloudPtr, cloudDownsampledPtr, cloudNormalPtr);
+
+
+
+
+    pcl::PCDWriter writer;  
+
+
+        // writer.write( HOME + "/adv_robotics_project/pcd/" + series + ".pcd", *cloudPtr, false);
+        // writer.write( HOME + "/adv_robotics_project/pcd_downsampled/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
+        // writer.write( HOME + "/adv_robotics_project/pcd_w_normals/" + series + "_normals.pcd", *cloudNormalPtr, false);
+    writer.write( HOME + "/adv_robotics_project/testData/" + series + ".pcd", *cloudPtr, false);
+    //writer.write( HOME + "/adv_robotics_project/testData/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
+    //writer.write( HOME + "/adv_robotics_project/testData/" + series + "_normals.pcd", *cloudNormalPtr, false);
+
+
+    // std::cout << "Time taken by loading images  : " << img_duration.count() /1000000.0 << " seconds" << std::endl;
+    // std::cout << "Time taken by voxel generation: " << voxel_duration.count() /1000000.0 << " seconds" << std::endl;
+    
+    // std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
+    //voxelListToFile(voxels);
+
+}
+
+
+
+void multithreadedAllComponents()
+{
+        const char* home = getenv("HOME");
     std::string HOME = home;
 
     std::vector<std::string> seriesList;
@@ -964,6 +1134,45 @@ int main(int argc, char** argv)
     {
         threads[endThreadsIndex[k]].join();
     }
+
+}
+
+int main(int argc, char** argv) 
+{
+
+
+
+    std::string path = "/adv_robotics_project/testData/kiwi/";
+    std::string series = "kiwi";
+    int numberOfimages = 36; 
+
+
+    if (argc > 1)
+        try
+        {
+            numberOfimages = std::stoi(argv[1]) ;
+        }
+        catch(const std::exception& e)
+        {
+            std::cerr << "ERROR!: Not a number, using 36 images" << '\n';
+        }
+        
+        
+    if (argc > 3)
+    {
+
+        path = argv[2];
+        series = argv[3];
+    }
+
+
+    //All components as multithreaded
+    multithreadedAllComponents();
+
+    //make_VH_and_PCD(path,series,36);
+    
+    //dino
+    //make_VH_and_PCD_of_dino("/adv_robotics_project/testData/DinoSR/","dinoSR",16);
 
     return 1;
 }
