@@ -6,6 +6,8 @@
 #include <string>
 #include <chrono>
 #include <fstream>
+#include <algorithm>
+#include <random>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <Eigen/Dense>
@@ -34,7 +36,13 @@
 #include <pcl/io/vtk_io.h>
 #include <pcl/surface/marching_cubes.h>
 #include <pcl/surface/marching_cubes_rbf.h>
+#include <pcl/filters/uniform_sampling.h>
+
+#include <pcl/filters/extract_indices.h>
+
+#include <pcl/kdtree/kdtree_flann.h>
 #include <stdlib.h>
+
 //#include <open3d/Open3D.h>      //Den her laver noget mærkeligt 
 
 
@@ -84,9 +92,16 @@ void applyMorphology(std::vector<cv::Mat> *images, cv::Size maskSize_open,  cv::
 
 void removeBackground(std::vector<cv::Mat> *images, double threshold, double maxval)
 {
+    cv::Mat circle (cv::Size(images->at(0).cols, images->at(0).rows), CV_8UC1);
+
+    cv::circle(circle, cv::Point(circle.cols / 2, circle.rows / 2),2000,255,-1);
+
+
+
     for (int i = 0; i < images->size(); i++)
     {
         cv::inRange(images->at(i),cv::Scalar(threshold, threshold, threshold), cv::Scalar(maxval, maxval, maxval),images->at(i));
+        cv::bitwise_and(images->at(i),circle,images->at(i));
     } 
 }
 
@@ -575,9 +590,9 @@ pcl::PointCloud<pcl::PointXYZ> updatePointCloud(std::vector<std::array<double, 4
     //fastTriangulation(cloud);
 
 
-    pcl::io::savePLYFileBinary(pathFolder + pathFile + ".ply", cloud);
-    //pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
-    std::cerr << "Saved " << cloud.size () << " data points to " << pathFolder + pathFile << ".ply" << std::endl;
+    // pcl::io::savePLYFileBinary(pathFolder + pathFile + ".ply", cloud);
+    // //pcl::io::savePCDFileASCII ("test_pcd.pcd", cloud);
+    // std::cerr << "Saved " << cloud.size () << " data points to " << pathFolder + pathFile << ".ply" << std::endl;
     
     return cloud;
 }
@@ -609,6 +624,96 @@ pcl::PointCloud<pcl::PointXYZ> extractSurfacePoints(pcl::PointCloud<pcl::PointXY
     return *cloud_hull;
 
 }
+
+
+void removeCenterOfVoxels(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, std::vector<double> voxel_size)
+{
+
+    float radius = voxel_size[0] + (voxel_size[0] * 0.1);
+    
+
+
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud (cloud);
+
+
+    std::vector<int> pointIdxRadiusSearch;
+    std::vector<float> pointRadiusSquaredDistance;
+
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+    pcl::PointXYZ searchPoint;
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    for (int j = 0; j < cloud->points.size(); j++)
+    {
+        searchPoint = cloud->points[j];
+        if ( kdtree.radiusSearch (searchPoint, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 1)
+        {
+            if (pointIdxRadiusSearch.size () > 6 ) 
+            {
+                inliers->indices.push_back(j);
+            }
+        }
+    }
+    
+    //std::cout << "New point cloud size is : " <<  cloud->points.size() - inliers->indices.size() << std::endl;
+
+    extract.setInputCloud(cloud);
+    extract.setIndices(inliers);
+    extract.setNegative(true);
+    extract.filter(*cloud);
+
+}
+
+
+void downSample(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, 
+                pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_downsampled,
+                int pointCloudSize)
+{
+    std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>> points = cloud->points;
+
+    auto rd = std::random_device {}; 
+    auto rng = std::default_random_engine { rd() };
+    std::shuffle(points.begin(), points.end(), rng);
+    
+    //std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>>::const_iterator first = points.begin();
+    //std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>>::const_iterator last = points.begin() + pointCloudSize;
+    
+    std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>> downSampled(points.begin(), points.begin() + pointCloudSize);
+
+    for(auto i : downSampled)
+    {
+        cloud_downsampled->push_back(i);
+    }
+}
+
+
+
+
+void normalEstimationMultiVeiw(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, 
+                                pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_downsampled,
+                                pcl::PointCloud<pcl::PointNormal>::Ptr cloud_normals_downsampled)
+{
+
+    // Create the normal estimation class, and pass the input dataset to it
+    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> ne;
+    ne.setInputCloud (cloud_downsampled);
+    // Pass the original data (before downsampling) as the search surface
+    ne.setSearchSurface (cloud);
+    // Create an empty kdtree representation, and pass it to the normal estimation object.
+    // Its content will be filled inside the object, based on the given surface dataset.
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ> ());
+    ne.setSearchMethod (tree);
+    // Output datasets
+    pcl::PointCloud<pcl::Normal>::Ptr cloud_normals (new pcl::PointCloud<pcl::Normal>);
+    // Use all neighbors in a sphere of radius 3cm
+    ne.setRadiusSearch (0.03);
+    // Compute the features
+    ne.compute (*cloud_normals);
+
+    pcl::concatenateFields(*cloud_downsampled, *cloud_normals, *cloud_normals_downsampled);
+}
+
+
 
 
 
@@ -643,9 +748,9 @@ int main(int argc, char** argv)
 
     std::vector<cv::Mat> contours;
 
-    std::string path = HOME + "/adv_robotics_project/testData/kiwi/";
-    std::string series = "kiwi";
-    int numberOfimages = 36; 
+    std::string path = HOME + "/adv_robotics_project/data/socket_dark/";
+    std::string series = "socket_dark";
+    int numberOfimages = 135; 
 
 
     if (argc > 1)
@@ -684,7 +789,7 @@ int main(int argc, char** argv)
     
     loadImages(&path, &series, &images, numberOfimages);
  
-    removeBackground(&images,0, 220);
+    removeBackground(&images,0, 200);
 
 
     writeImages(&images, &path, &output);
@@ -722,8 +827,6 @@ int main(int argc, char** argv)
 
     std::vector<std::array<double, 4>>  voxels = init_voxels(xlim,ylim,zlim, voxel_size);
 
-    
-    pcl::visualization::PCLVisualizer::Ptr viewer;
     pcl::PointCloud<pcl::PointXYZ> cloud;
     for (int i = 0; i < numberOfimages; i++)
     {
@@ -736,15 +839,32 @@ int main(int argc, char** argv)
 
     }
 
-    cloud = updatePointCloud(voxels,series);
     
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPtr(new pcl::PointCloud<pcl::PointXYZ>(cloud));
-    pcl::PCDWriter writer;  
-    writer.write( HOME + "/adv_robotics_project/pcd/" + series + ".pcd", extractSurfacePoints(cloudPtr), false);
+    cloud = updatePointCloud(voxels,series);
     
 
 
     auto voxel_done_time = std::chrono::high_resolution_clock::now();
+
+
+    pcl::PCDWriter writer;  
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudPtr(new pcl::PointCloud<pcl::PointXYZ>(cloud));
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloudDownsampledPtr(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointNormal>::Ptr cloudNormalPtr(new pcl::PointCloud<pcl::PointNormal>());
+
+    removeCenterOfVoxels(cloudPtr, voxel_size);
+
+    writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_surface.pcd", *cloudPtr, false);
+    downSample(cloudPtr, cloudDownsampledPtr, 4096);
+
+
+    normalEstimationMultiVeiw(cloudPtr, cloudDownsampledPtr, cloudNormalPtr);
+
+
+    // writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + ".pcd", *cloudPtr, false);
+    // writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_downsampled.pcd", *cloudDownsampledPtr, false);
+    // writer.write( HOME + "/adv_robotics_project/pcd_no_concave/" + series + "_normals.pcd", *cloudNormalPtr, false);
+
 
     auto img_duration = std::chrono::duration_cast<std::chrono::microseconds>(img_done_time - start);
     auto voxel_duration = std::chrono::duration_cast<std::chrono::microseconds>( voxel_done_time - img_done_time );
@@ -752,8 +872,23 @@ int main(int argc, char** argv)
     // std::cout << "Time taken by loading images  : " << img_duration.count() /1000000.0 << " seconds" << std::endl;
     // std::cout << "Time taken by voxel generation: " << voxel_duration.count() /1000000.0 << " seconds" << std::endl;
     
-    // std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / 16.0 << " seconds" << std::endl;
+    // std::cout << "Time taken per image (average): " << voxel_duration.count() /1000000.0 / numberOfimages << " seconds" << std::endl;
     //voxelListToFile(voxels);
+
+    std::ofstream testRes;
+
+    // testRes.open("/home/jc/adv_robotics_project/testResult.csv", std::ios::app);
+    // testRes << cloud.size() << ",";
+    // testRes << voxels.size() << ",";
+    // testRes << voxel_duration.count() /1000000.0 << ",";
+    // testRes << voxel_duration.count() /1000000.0 / numberOfimages << "\n";
+
+    std::cout << cloud.size() << ",";
+    std::cout << cloudPtr->size() << ",";
+    std::cout << cloudDownsampledPtr->size() << "\n";
+    //std::cout << voxel_duration.count() /1000000.0 / numberOfimages << "\n";
+    //testRes.close();
+    
   
     return 1;
 }
